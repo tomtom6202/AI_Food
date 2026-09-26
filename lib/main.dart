@@ -32,7 +32,6 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
 
-  // 這裡已經將第一個替換為 HomePage，第三個替換為 SettingsPage
   final List<Widget> _pages = [
     const HomePage(), 
     const Center(child: Text('這裡是紀錄頁面（準備放歷史資料，待開發）')),
@@ -68,11 +67,10 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  Uint8List? _imageBytes; // 儲存圖片資料，兼容手機與網頁顯示
+  Uint8List? _imageBytes;
   final _noteController = TextEditingController();
   bool _isLoading = false;
 
-  // 取得圖片 (拍照或相簿)
   Future<void> _pickImage(ImageSource source) async {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: source, maxWidth: 800);
@@ -84,7 +82,6 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  // 呼叫 Gemini API
   Future<void> _analyzeFood() async {
     if (_imageBytes == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('請先拍攝或上傳一張圖片')));
@@ -96,7 +93,8 @@ class _HomePageState extends State<HomePage> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final apiKey = prefs.getString('gemini_api_key') ?? '';
-      final modelName = prefs.getString('gemini_model') ?? 'gemini-1.5-flash';
+      // 預設使用最新的 3.8 Flash
+      final modelName = prefs.getString('gemini_model') ?? 'gemini-3.8-flash';
 
       if (apiKey.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('請先至「設定」頁面輸入 API Key')));
@@ -106,7 +104,6 @@ class _HomePageState extends State<HomePage> {
 
       final base64Image = base64Encode(_imageBytes!);
 
-      // 給 Gemini 的系統提示詞 (強制要求 JSON 回傳，並包含你指定的營養素)
       final prompt = '''
 你是一位專業的營養師。請分析使用者上傳的食物照片，並參考其附加的文字備註：「${_noteController.text}」。
 請估算圖中食物的總重量，並提供每 100 公克該食物的營養成分。
@@ -156,7 +153,6 @@ class _HomePageState extends State<HomePage> {
         final data = jsonDecode(response.body);
         final resultText = data['candidates'][0]['content']['parts'][0]['text'];
         
-        // 暫時用彈窗顯示結果，之後的步驟我們會改為存入紀錄資料庫
         if (!mounted) return;
         showDialog(
           context: context,
@@ -187,7 +183,6 @@ class _HomePageState extends State<HomePage> {
       padding: const EdgeInsets.all(16.0),
       child: Column(
         children: [
-          // 圖片顯示區
           Expanded(
             child: Container(
               width: double.infinity,
@@ -204,7 +199,6 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
           const SizedBox(height: 16),
-          // 拍照與相簿按鈕
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
@@ -221,7 +215,6 @@ class _HomePageState extends State<HomePage> {
             ],
           ),
           const SizedBox(height: 16),
-          // 文字備註輸入框
           TextField(
             controller: _noteController,
             decoration: const InputDecoration(
@@ -231,7 +224,6 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
           const SizedBox(height: 16),
-          // 送出按鈕
           SizedBox(
             width: double.infinity,
             height: 50,
@@ -261,7 +253,8 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   final _apiKeyController = TextEditingController();
-  String _selectedModel = 'gemini-1.5-flash';
+  // 預設為最新模型
+  String _selectedModel = 'gemini-3.8-flash';
 
   @override
   void initState() {
@@ -273,7 +266,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _apiKeyController.text = prefs.getString('gemini_api_key') ?? '';
-      _selectedModel = prefs.getString('gemini_model') ?? 'gemini-1.5-flash';
+      _selectedModel = prefs.getString('gemini_model') ?? 'gemini-3.8-flash';
     });
   }
 
@@ -312,9 +305,13 @@ class _SettingsPageState extends State<SettingsPage> {
           DropdownButtonFormField<String>(
             value: _selectedModel,
             decoration: const InputDecoration(border: OutlineInputBorder()),
+            // 更新：加入所有最新模型選項
             items: const [
-              DropdownMenuItem(value: 'gemini-1.5-flash', child: Text('gemini-1.5-flash (較快)')),
-              DropdownMenuItem(value: 'gemini-1.5-pro', child: Text('gemini-1.5-pro (較精準)')),
+              DropdownMenuItem(value: 'gemini-3.8-flash', child: Text('Gemini 3.8 Flash (最新推薦)')),
+              DropdownMenuItem(value: 'gemini-3.7-flash', child: Text('Gemini 3.7 Flash')),
+              DropdownMenuItem(value: 'gemini-3.5-flash-lite', child: Text('Gemini 3.5 Flash-Lite (輕量極速)')),
+              DropdownMenuItem(value: 'gemini-3.1-pro-preview', child: Text('Gemini 3.1 Pro (高推理)')),
+              DropdownMenuItem(value: 'gemini-3.8-live', child: Text('Gemini 3.8 Live (影音互動)')),
             ],
             onChanged: (value) {
               if (value != null) {
