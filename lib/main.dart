@@ -167,8 +167,12 @@ JSON 結構範例：
 }
 ''';
 
-      // 這裡已經修復了被自動轉成 Markdown 連結的問題
-      final cleanUrl = '[https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent?key=$apiKey'.trim](https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent?key=$apiKey'.trim)();
+      // 終極防複製變形大法：把網址拆成三個字串拼起來
+      final String protocol = 'https://';
+      final String host = 'generativelanguage.googleapis.com';
+      final String path = '/v1beta/models/$modelName:generateContent?key=$apiKey';
+      final String cleanUrl = protocol + host + path;
+      
       final url = Uri.parse(cleanUrl);
 
       final response = await http.post(
