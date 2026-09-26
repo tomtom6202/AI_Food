@@ -1,21 +1,33 @@
-name: Build Android
-on: [push]
+name: Build Android APK
+on:
+  push:
+    branches: [ "main" ]
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v3
       - uses: actions/setup-java@v3
         with:
           distribution: 'zulu'
           java-version: '17'
+      
       - uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
+          
+      # 1. 強制雲端產生 android 資料夾
+      - run: flutter create . --platforms android
+      
+      # 2. 自動在設定檔中注入「網路連線權限」
+      - run: sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET"/>' android/app/src/main/AndroidManifest.xml
+      
+      # 3. 獲取套件並開始打包
       - run: flutter pub get
-      - run: flutter create .
       - run: flutter build apk --release
-      - uses: actions/upload-artifact@v4
+      
+      - uses: actions/upload-artifact@v3
         with:
           name: app-release-apk
           path: build/app/outputs/flutter-apk/app-release.apk
