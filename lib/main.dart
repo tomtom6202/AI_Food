@@ -132,7 +132,8 @@ class _HomePageState extends State<HomePage> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final apiKey = (prefs.getString('gemini_api_key') ?? '').trim();
-      final modelName = prefs.getString('gemini_model') ?? 'gemini-1.5-flash-8b';
+      // 這裡改回預設最新的 3.8 Flash
+      final modelName = prefs.getString('gemini_model') ?? 'gemini-3.8-flash';
 
       if (apiKey.isEmpty) {
         if (!mounted) return;
@@ -143,7 +144,6 @@ class _HomePageState extends State<HomePage> {
 
       final base64Image = base64Encode(_imageBytes!);
 
-      // 移除了所有會被手機剪貼簿誤判的 Markdown 反引號符號
       final prompt = '''
 你是一位專業營養師。請分析照片中的食物，並參考備註：「${_noteController.text.trim()}」。
 請估算該食物總重量（公克），並給出每 100g 該食物的營養數值。
@@ -168,7 +168,6 @@ JSON 結構範例：
 }
 ''';
 
-      // 防複製變形寫法
       final String protocol = 'https://';
       final String host = 'generativelanguage.googleapis.com';
       final String path = '/v1beta/models/$modelName:generateContent?key=$apiKey';
@@ -203,7 +202,6 @@ JSON 結構範例：
         final data = jsonDecode(response.body);
         String rawText = data['candidates'][0]['content']['parts'][0]['text'];
         
-        // 全新高容錯 JSON 擷取法，不再依賴 replaceAll
         int startIndex = rawText.indexOf('{');
         int endIndex = rawText.lastIndexOf('}');
         if (startIndex != -1 && endIndex != -1) {
@@ -633,7 +631,8 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   final _apiKeyController = TextEditingController();
-  String _selectedModel = 'gemini-1.5-flash-8b';
+  // 將初始預設值改為最新的 3.8 Flash
+  String _selectedModel = 'gemini-3.8-flash';
 
   @override
   void initState() {
@@ -645,7 +644,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _apiKeyController.text = prefs.getString('gemini_api_key') ?? '';
-      _selectedModel = prefs.getString('gemini_model') ?? 'gemini-1.5-flash-8b';
+      _selectedModel = prefs.getString('gemini_model') ?? 'gemini-3.8-flash';
     });
   }
 
@@ -684,12 +683,13 @@ class _SettingsPageState extends State<SettingsPage> {
           DropdownButtonFormField<String>(
             value: _selectedModel,
             decoration: const InputDecoration(border: OutlineInputBorder()),
+            // 替換回最新的 2026 模型清單
             items: const [
-              DropdownMenuItem(value: 'gemini-1.5-flash-8b', child: Text('Gemini 1.5 Flash-8B (推薦)')),
-              DropdownMenuItem(value: 'gemini-2.5-flash', child: Text('Gemini 2.5 Flash')),
-              DropdownMenuItem(value: 'gemini-2.0-flash', child: Text('Gemini 2.0 Flash')),
-              DropdownMenuItem(value: 'gemini-1.5-flash', child: Text('Gemini 1.5 Flash')),
-              DropdownMenuItem(value: 'gemini-1.5-pro', child: Text('Gemini 1.5 Pro')),
+              DropdownMenuItem(value: 'gemini-3.8-flash', child: Text('Gemini 3.8 Flash (最新推薦)')),
+              DropdownMenuItem(value: 'gemini-3.7-flash', child: Text('Gemini 3.7 Flash')),
+              DropdownMenuItem(value: 'gemini-3.5-flash-lite', child: Text('Gemini 3.5 Flash-Lite (輕量極速)')),
+              DropdownMenuItem(value: 'gemini-3.1-pro-preview', child: Text('Gemini 3.1 Pro (高推理)')),
+              DropdownMenuItem(value: 'gemini-3.8-live', child: Text('Gemini 3.8 Live (影音互動)')),
             ],
             onChanged: (val) {
               if (val != null) {
