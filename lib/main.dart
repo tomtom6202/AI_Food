@@ -92,8 +92,8 @@ class _HomePageState extends State<HomePage> {
 
     try {
       final prefs = await SharedPreferences.getInstance();
-      final apiKey = prefs.getString('gemini_api_key') ?? '';
-      // 預設使用最新的 3.8 Flash
+      // 使用 .trim() 確保讀取出來的 API Key 前後沒有不小心的空白或換行
+      final apiKey = (prefs.getString('gemini_api_key') ?? '').trim();
       final modelName = prefs.getString('gemini_model') ?? 'gemini-3.8-flash';
 
       if (apiKey.isEmpty) {
@@ -126,7 +126,9 @@ class _HomePageState extends State<HomePage> {
 }
 '''; 
 
-      final url = Uri.parse('[https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent?key=$apiKey](https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent?key=$apiKey)');
+      // 使用 .trim() 確保整串網址前面不會有奇怪的符號導致解析錯誤
+      final urlString = '[https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent?key=$apiKey'.trim](https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent?key=$apiKey'.trim)();
+      final url = Uri.parse(urlString);
       
       final response = await http.post(
         url,
@@ -166,12 +168,40 @@ class _HomePageState extends State<HomePage> {
         );
       } else {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('API 錯誤，請確認金鑰是否正確。')));
+        
+        // 擷取 API 回傳的真實錯誤訊息
+        String errorMessage = '未知錯誤';
+        try {
+          final errorData = jsonDecode(response.body);
+          errorMessage = errorData['error']['message'] ?? response.body;
+        } catch (e) {
+          errorMessage = response.body;
+        }
+
+        showDialog(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text('API 連線失敗 (狀態碼: ${response.statusCode})'),
+            content: SingleChildScrollView(child: Text('錯誤訊息:\n$errorMessage')),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('了解'))
+            ],
+          )
+        );
       }
 
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('發生錯誤: $e')));
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('App 發生錯誤'),
+          content: SingleChildScrollView(child: Text(e.toString())),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('了解'))
+          ],
+        )
+      );
     } finally {
       setState(() { _isLoading = false; });
     }
@@ -253,7 +283,6 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   final _apiKeyController = TextEditingController();
-  // 預設為最新模型
   String _selectedModel = 'gemini-3.8-flash';
 
   @override
@@ -272,6 +301,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _saveSettings() async {
     final prefs = await SharedPreferences.getInstance();
+    // 儲存前用 .trim() 去除使用者可能誤按的頭尾空白
     await prefs.setString('gemini_api_key', _apiKeyController.text.trim());
     await prefs.setString('gemini_model', _selectedModel);
     
@@ -305,7 +335,6 @@ class _SettingsPageState extends State<SettingsPage> {
           DropdownButtonFormField<String>(
             value: _selectedModel,
             decoration: const InputDecoration(border: OutlineInputBorder()),
-            // 更新：加入所有最新模型選項
             items: const [
               DropdownMenuItem(value: 'gemini-3.8-flash', child: Text('Gemini 3.8 Flash (最新推薦)')),
               DropdownMenuItem(value: 'gemini-3.7-flash', child: Text('Gemini 3.7 Flash')),
