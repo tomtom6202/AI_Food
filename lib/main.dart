@@ -167,7 +167,7 @@ JSON 結構範例：
 }
 ''';
 
-      final cleanUrl = '[https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent?key=$apiKey'.trim](https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent?key=$apiKey'.trim)();
+      final cleanUrl = '[https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent?key=$apiKey'.trim](https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent?key=$apiKey'.trim();
       final url = Uri.parse(cleanUrl);
 
       final response = await http.post(
