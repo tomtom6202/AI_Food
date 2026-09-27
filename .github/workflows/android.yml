@@ -17,27 +17,24 @@ jobs:
         with:
           channel: 'stable'
           
-      # 1. 建立 Android 專案
       - run: flutter create . --platforms android
       
-      # 2. 替換 App 名稱與加入網路權限
       - run: sed -i 's/android:label="[^"]*"/android:label="AI 營養顧問"/g' android/app/src/main/AndroidManifest.xml
       - run: sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET"/>' android/app/src/main/AndroidManifest.xml
       
-      # 3. 最乾淨的版本設定：寫入 local.properties，滿足 share_plus ^9.0.0 的需求
       - name: Set SDK versions safely
         run: |
           echo "flutter.compileSdkVersion=34" >> android/local.properties
           echo "flutter.targetSdkVersion=34" >> android/local.properties
           echo "flutter.minSdkVersion=21" >> android/local.properties
       
-      # 4. 下載套件
       - run: flutter pub get
       
-      # 5. 開始打包 APK
+      # 新增這行：自動生成並替換 App Icon
+      - run: flutter pub run flutter_launcher_icons
+      
       - run: flutter build apk --release
       
-      # 6. 輸出檔案供下載
       - uses: actions/upload-artifact@v4
         with:
           name: app-release-apk
