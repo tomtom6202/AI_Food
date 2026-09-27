@@ -22,6 +22,14 @@ jobs:
       - run: sed -i 's/android:label="[^"]*"/android:label="AI 營養顧問"/g' android/app/src/main/AndroidManifest.xml
       - run: sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET"/>' android/app/src/main/AndroidManifest.xml
       
+      # 終極破解法：同時處理新版 .kts 與舊版 .gradle，找不到檔案也不會報錯 (|| true)
+      - name: Force Update SDK Version
+        run: |
+          sed -i 's/flutter.compileSdkVersion/36/g' android/app/build.gradle.kts || true
+          sed -i 's/flutter.targetSdkVersion/36/g' android/app/build.gradle.kts || true
+          sed -i 's/flutter.compileSdkVersion/36/g' android/app/build.gradle || true
+          sed -i 's/flutter.targetSdkVersion/36/g' android/app/build.gradle || true
+      
       - run: flutter pub get
       
       - run: flutter pub run flutter_launcher_icons
