@@ -22,13 +22,6 @@ jobs:
       - run: sed -i 's/android:label="[^"]*"/android:label="AI 營養顧問"/g' android/app/src/main/AndroidManifest.xml
       - run: sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET"/>' android/app/src/main/AndroidManifest.xml
       
-      # 這次我們直接暴力修改 build.gradle 裡面的設定值，強制鎖定為 36
-      - name: Force Update SDK Version
-        run: |
-          sed -i 's/flutter.compileSdkVersion/36/g' android/app/build.gradle
-          sed -i 's/flutter.targetSdkVersion/36/g' android/app/build.gradle
-          sed -i 's/flutter.minSdkVersion/21/g' android/app/build.gradle
-      
       - run: flutter pub get
       
       - run: flutter pub run flutter_launcher_icons
