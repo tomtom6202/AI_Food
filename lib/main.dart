@@ -79,7 +79,7 @@ final Map<String, String> nutrientDisplayNames = {
   'vitamin_B6_mg': '維生素B6 (mg)', 'vitamin_B12_ug': '維生素B12 (ug)', 'vitamin_C_mg': '維生素C (mg)',
   'vitamin_D_ug': '維生素D (ug)', 'vitamin_E_mg': '維生素E (mg)', 'niacin_mg': '煙酸 (mg)',
   'phosphorus_mg': '磷 (mg)', 'potassium_mg': '鉀 (mg)', 'sodium_mg': '鈉 (mg)', 'magnesium_mg': '鎂 (mg)',
-  'iron_mg': '鐵 (mg)', 'zinc_mg': '鋅 (mg)', 'trans_fat_g': '反式脂肪 (g)', 'saturated_fat_g': '飽和脂肪 (g)',
+  'iron_mg': '鐵 (mg)', 'zinc_mg': '鋅 (mg)', 'trans_fat_g': '反式脂肪 (g)', 'saturated_fat_g': '飽坐在肪 (g)',
   'sugar_g': '糖 (g)', 'selenium_ug': '硒 (ug)', 'copper_ug': '銅 (ug)', 'manganese_mg': '錳 (mg)',
 };
 
@@ -170,7 +170,8 @@ class _HomePageState extends State<HomePage> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final apiKey = (prefs.getString('gemini_api_key') ?? '').trim();
-      final modelName = prefs.getString('gemini_model') ?? 'gemini-1.5-flash';
+      // 正確回復為 3.8-flash 為預設值
+      final modelName = prefs.getString('gemini_model') ?? 'gemini-3.8-flash';
 
       if (apiKey.isEmpty) {
         if (!mounted) return;
@@ -367,13 +368,9 @@ class _RecordsPageState extends State<RecordsPage> {
         return;
       }
       final jsonStr = jsonEncode(_records);
-      // 取得手機的暫存資料夾
       final directory = await getTemporaryDirectory();
-      // 建立一個 .json 檔案
       final file = File('${directory.path}/food_records_export.json');
       await file.writeAsString(jsonStr);
-      
-      // 使用 share_plus 呼叫系統的分享選單 (可儲存到手機或傳到 LINE)
       await Share.shareXFiles([XFile(file.path)], text: '這是我的 AI 食物分析紀錄備份檔');
     } catch (e) {
       if (!mounted) return;
@@ -637,13 +634,14 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   final _apiKeyController = TextEditingController();
   final _targetCaloriesController = TextEditingController(); 
-  String _selectedModel = 'gemini-1.5-flash';
+  // 正確回復為最新的 3.x 系列
+  String _selectedModel = 'gemini-3.8-flash';
   bool _uploadOriginal = false;
 
   final Map<String, String> _modelDescriptions = {
-    'gemini-1.5-pro': '【優點】最強大的模型，精準度極高，適合複雜食物。\n【缺點】處理速度較慢。',
-    'gemini-1.5-flash': '【優點】最新推薦模型，聰明且速度快。\n【缺點】無明顯缺點，強烈建議設為首選。',
-    'gemini-1.5-flash-8b': '【優點】輕量版，回覆速度最快。\n【缺點】只適合簡單清晰的食物圖片。',
+    'gemini-3.1-pro-preview': '【優點】最強大的模型，精準度極高，適合複雜食物。\n【缺點】處理速度較慢。',
+    'gemini-3.8-flash': '【優點】最新推薦模型，聰明且速度快。\n【缺點】無明顯缺點，強烈建議設為首選。',
+    'gemini-3.5-flash-lite': '【優點】輕量版，回覆速度最快。\n【缺點】只適合簡單清晰的食物圖片。',
   };
 
   @override
@@ -657,7 +655,7 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() {
       _apiKeyController.text = prefs.getString('gemini_api_key') ?? '';
       _targetCaloriesController.text = (prefs.getInt('target_calories') ?? 2000).toString(); 
-      _selectedModel = prefs.getString('gemini_model') ?? 'gemini-1.5-flash';
+      _selectedModel = prefs.getString('gemini_model') ?? 'gemini-3.8-flash';
       _uploadOriginal = prefs.getBool('upload_original') ?? false;
     });
   }
@@ -688,7 +686,16 @@ class _SettingsPageState extends State<SettingsPage> {
           const SizedBox(height: 12),
           const Text('選擇 AI 分析模型', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
-          DropdownButtonFormField<String>(value: _selectedModel, decoration: const InputDecoration(border: OutlineInputBorder()), items: const [DropdownMenuItem(value: 'gemini-1.5-pro', child: Text('Gemini 1.5 Pro (最強)')), DropdownMenuItem(value: 'gemini-1.5-flash', child: Text('Gemini 1.5 Flash (推薦)')), DropdownMenuItem(value: 'gemini-1.5-flash-8b', child: Text('Gemini 1.5 Flash-8b (極速)'))], onChanged: (val) { if (val != null) { setState(() => _selectedModel = val); _autoSaveSettings(); } }),
+          DropdownButtonFormField<String>(
+            value: _selectedModel, 
+            decoration: const InputDecoration(border: OutlineInputBorder()), 
+            items: const [
+              DropdownMenuItem(value: 'gemini-3.1-pro-preview', child: Text('Gemini 3.1 Pro (最強)')), 
+              DropdownMenuItem(value: 'gemini-3.8-flash', child: Text('Gemini 3.8 Flash (推薦)')), 
+              DropdownMenuItem(value: 'gemini-3.5-flash-lite', child: Text('Gemini 3.5 Flash-Lite (極速)'))
+            ], 
+            onChanged: (val) { if (val != null) { setState(() => _selectedModel = val); _autoSaveSettings(); } }
+          ),
           const SizedBox(height: 8),
           Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.blue.withOpacity(0.05), borderRadius: BorderRadius.circular(8)), child: Text(_modelDescriptions[_selectedModel] ?? '', style: const TextStyle(color: Colors.black87, height: 1.4))),
           const SizedBox(height: 24),
