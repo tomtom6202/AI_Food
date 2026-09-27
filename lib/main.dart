@@ -207,7 +207,7 @@ class _HomePageState extends State<HomePage> {
 （若有微量元素可自行加在 nutrients_per_100g 中，無則省略，數值請務必只填寫數字）
 ''';
 
-      // 🛡️ 這裡改用安全的 Uri.https，徹底避免複製貼上帶來的隱藏符號與括號錯誤
+      // 使用 Uri.https 安全構造網址，避免複製貼上帶來的隱藏符號錯誤
       final url = Uri.https(
         'generativelanguage.googleapis.com',
         '/v1beta/models/$modelName:generateContent',
@@ -536,7 +536,7 @@ class _RecordsPageState extends State<RecordsPage> {
 }
 
 // ==========================================
-// 3. 熱量計算頁面
+// 3. 熱量計算頁面 (加入自動存檔功能)
 // ==========================================
 class CalculatorPage extends StatefulWidget {
   const CalculatorPage({super.key});
@@ -547,7 +547,7 @@ class CalculatorPage extends StatefulWidget {
 
 class _CalculatorPageState extends State<CalculatorPage> {
   List<Map<String, dynamic>> _records = [];
-  final List<Map<String, dynamic>> _selectedItems = [];
+  List<Map<String, dynamic>> _selectedItems = [];
   int _targetCalories = 2000;
 
   @override
@@ -558,15 +558,32 @@ class _CalculatorPageState extends State<CalculatorPage> {
 
   Future<void> _loadData() async {
     final prefs = await SharedPreferences.getInstance();
-    final List decoded = jsonDecode(prefs.getString('food_records') ?? '[]');
+    final List decodedRecords = jsonDecode(prefs.getString('food_records') ?? '[]');
+    // 讀取上次存檔的計算機清單
+    final List decodedCalc = jsonDecode(prefs.getString('calculator_items') ?? '[]'); 
+    
     setState(() {
-      _records = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+      _records = decodedRecords.map((e) => Map<String, dynamic>.from(e)).toList();
       _targetCalories = prefs.getInt('target_calories') ?? 2000;
+      
+      // 解析計算機資料，確保倍數 (multiplier) 轉換為 double 格式避免報錯
+      _selectedItems = decodedCalc.map((e) {
+        final map = Map<String, dynamic>.from(e);
+        map['multiplier'] = (map['multiplier'] as num).toDouble();
+        return map;
+      }).toList();
     });
+  }
+
+  // 儲存計算機狀態到手機本地端
+  Future<void> _saveCalculatorData() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('calculator_items', jsonEncode(_selectedItems));
   }
 
   void _addToCalculator(Map<String, dynamic> record) {
     setState(() { _selectedItems.add({'record': record, 'multiplier': 1.0}); });
+    _saveCalculatorData(); // 新增時存檔
   }
 
   void _updateMultiplier(int index, double delta) {
@@ -576,6 +593,7 @@ class _CalculatorPageState extends State<CalculatorPage> {
       if (current <= 0) _selectedItems.removeAt(index);
       else _selectedItems[index]['multiplier'] = current;
     });
+    _saveCalculatorData(); // 修改份數或刪除時存檔
   }
 
   @override
@@ -601,6 +619,7 @@ class _CalculatorPageState extends State<CalculatorPage> {
         Expanded(
           child: Row(
             children: [
+              // 左側：歷史紀錄清單
               Expanded(
                 flex: 1,
                 child: Container(
@@ -634,6 +653,7 @@ class _CalculatorPageState extends State<CalculatorPage> {
                 ),
               ),
               const VerticalDivider(width: 1, thickness: 1),
+              // 右側：已選取計算清單
               Expanded(
                 flex: 2,
                 child: _selectedItems.isEmpty
@@ -691,6 +711,7 @@ class _CalculatorPageState extends State<CalculatorPage> {
             ],
           ),
         ),
+        // 底部：總計區塊
         Container(
           padding: const EdgeInsets.all(16.0),
           decoration: const BoxDecoration(color: Colors.white, boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, -2))]),
@@ -709,7 +730,10 @@ class _CalculatorPageState extends State<CalculatorPage> {
                   ),
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                    onPressed: () => setState(() => _selectedItems.clear()),
+                    onPressed: () {
+                      setState(() => _selectedItems.clear());
+                      _saveCalculatorData(); // 清空時存檔
+                    },
                     icon: const Icon(Icons.delete_sweep, color: Colors.white),
                     label: const Text('清空', style: TextStyle(color: Colors.white)),
                   )
