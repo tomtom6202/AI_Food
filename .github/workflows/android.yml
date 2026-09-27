@@ -17,30 +17,27 @@ jobs:
         with:
           channel: 'stable'
           
-      # 1. 建立 Android 專案資料夾
+      # 1. 建立 Android 專案
       - run: flutter create . --platforms android
       
-      # 2. 替換 App 顯示名稱與加入網路權限
+      # 2. 替換 App 名稱與加入網路權限
       - run: sed -i 's/android:label="[^"]*"/android:label="AI 營養顧問"/g' android/app/src/main/AndroidManifest.xml
       - run: sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET"/>' android/app/src/main/AndroidManifest.xml
       
-      # 3. [終極乾淨版] 使用官方推薦的 local.properties 來設定版本，絕不破壞原檔案！
-      - name: Set Android SDK Versions safely
+      # 3. 最乾淨的版本設定：寫入 local.properties，滿足 share_plus ^9.0.0 的需求
+      - name: Set SDK versions safely
         run: |
+          echo "flutter.compileSdkVersion=34" >> android/local.properties
+          echo "flutter.targetSdkVersion=34" >> android/local.properties
           echo "flutter.minSdkVersion=21" >> android/local.properties
-          echo "flutter.compileSdkVersion=36" >> android/local.properties
-          echo "flutter.targetSdkVersion=36" >> android/local.properties
       
       # 4. 下載套件
       - run: flutter pub get
       
-      # 5. 產生 App 圖示
-      - run: flutter pub run flutter_launcher_icons
-      
-      # 6. 開始打包 APK
+      # 5. 開始打包 APK
       - run: flutter build apk --release
       
-      # 7. 輸出檔案供下載
+      # 6. 輸出檔案供下載
       - uses: actions/upload-artifact@v4
         with:
           name: app-release-apk
