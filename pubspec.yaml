@@ -23,6 +23,12 @@ dependencies:
   file_picker: ^8.0.0 # 新增這個套件
 # ... (後略)
 
+# ----------------- 加入這一段 -----------------
+dependency_overrides:
+  flutter_plugin_android_lifecycle: ^2.0.22 # 強制使用不會報 36 錯誤的穩定版
+  plugin_platform_interface: ^2.1.8
+# ----------------------------------------------
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
