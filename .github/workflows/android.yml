@@ -17,23 +17,15 @@ jobs:
         with:
           channel: 'stable'
           
-      # 1. 刪除可能有問題的舊設定，重新產生乾淨的 Android 專案
       - name: Recreate Android Project
         run: |
           rm -rf android
           flutter create . --platforms android
           
-      # 2. 設定 App 顯示名稱與網路權限
       - name: Setup App Config
         run: |
           sed -i 's/android:label="[^"]*"/android:label="AI 營養顧問"/g' android/app/src/main/AndroidManifest.xml
           sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET"/>' android/app/src/main/AndroidManifest.xml
-
-      # 3. 單純將 App 本身的 SDK 升級到 36 即可，移除會報錯的全域腳本
-      - name: Set App SDK to 36
-        run: |
-          sed -i 's/flutter.compileSdkVersion/36/g' android/app/build.gradle.kts
-          sed -i 's/flutter.targetSdkVersion/36/g' android/app/build.gradle.kts
 
       - run: flutter pub get
       
