@@ -31,8 +31,8 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
-# 告訴套件要用哪張圖當 Icon
-flutter_icons:
+# 將標籤名稱更新，並關閉 iOS 圖示生成
+flutter_launcher_icons:
   android: true
-  ios: true
+  ios: false  # <--- 這裡改成 false
   image_path: "icon.png"
