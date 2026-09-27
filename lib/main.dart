@@ -16,7 +16,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'AI 營養分析',
+      title: 'AI 營養顧問',
       theme: ThemeData(
         primarySwatch: Colors.green,
         useMaterial3: false,
@@ -63,7 +63,6 @@ class _MainScreenState extends State<MainScreen> {
   }
 }
 
-// 營養素中文標籤對照表
 final Map<String, String> nutrientDisplayNames = {
   'calories_kcal': '熱量 (kcal)',
   'protein_g': '蛋白質 (g)',
@@ -94,6 +93,47 @@ final Map<String, String> nutrientDisplayNames = {
   'copper_ug': '銅 (ug)',
   'manganese_mg': '錳 (mg)',
 };
+
+// ==========================================
+// 共用元件：用來顯示 AI 評價區塊
+// ==========================================
+Widget _buildEvalRow(String title, Map<String, dynamic>? evalData) {
+  if (evalData == null) return const SizedBox.shrink();
+  final score = evalData['score'] ?? '?';
+  final reason = evalData['reason'] ?? '';
+  
+  Color scoreColor = Colors.grey;
+  if (score == 'A') scoreColor = Colors.green;
+  if (score == 'B') scoreColor = Colors.blue;
+  if (score == 'C') scoreColor = Colors.orange;
+  if (score == 'D') scoreColor = Colors.red;
+
+  return Padding(
+    padding: const EdgeInsets.only(top: 8.0, bottom: 4.0),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: scoreColor.withOpacity(0.2),
+                border: Border.all(color: scoreColor),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(score, style: TextStyle(color: scoreColor, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(reason, style: const TextStyle(color: Colors.black87)),
+      ],
+    ),
+  );
+}
 
 // ==========================================
 // 1. 主頁面 (拍照、備註與 AI 分析)
@@ -132,7 +172,6 @@ class _HomePageState extends State<HomePage> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final apiKey = (prefs.getString('gemini_api_key') ?? '').trim();
-      // 這裡改回預設最新的 3.8 Flash
       final modelName = prefs.getString('gemini_model') ?? 'gemini-3.8-flash';
 
       if (apiKey.isEmpty) {
@@ -144,26 +183,42 @@ class _HomePageState extends State<HomePage> {
 
       final base64Image = base64Encode(_imageBytes!);
 
+      // 進階版 Prompt：加入了拆解(breakdown)與評價(evaluation)的規則
       final prompt = '''
-你是一位專業營養師。請分析照片中的食物，並參考備註：「${_noteController.text.trim()}」。
-請估算該食物總重量（公克），並給出每 100g 該食物的營養數值。
+你是一位專業的 AI 營養顧問。請分析照片中的食物，並參考備註：「${_noteController.text.trim()}」。
 
 【必須遵守的規則】
 1. 只輸出純 JSON 物件，嚴禁包含 Markdown 標籤或任何其他說明文字。
-2. 以下 4 項為必填數值：calories_kcal, protein_g, fat_g, carbs_g。
-3. 其他營養素若含有請提供數值，若無或無法估算請填 null：
-dietary_fiber_g, cholesterol_mg, calcium_mg, vitamin_A_ug, vitamin_B1_mg, vitamin_B2_mg, vitamin_B6_mg, vitamin_B12_ug, vitamin_C_mg, vitamin_D_ug, vitamin_E_mg, niacin_mg, phosphorus_mg, potassium_mg, sodium_mg, magnesium_mg, iron_mg, zinc_mg, trans_fat_g, saturated_fat_g, sugar_g, selenium_ug, copper_ug, manganese_mg。
+2. 估算該食物總重量(total_weight_g)，並給出每 100g 的營養數值(nutrients_per_100g)。(必填: calories_kcal, protein_g, fat_g, carbs_g)
+3. 必須包含 "breakdown" 陣列：
+   - 若照片為單一組合食物(如漢堡)，請拆解其食材(如麵包, 漢堡肉, 起司)。
+   - 若為多樣獨立食物(如漢堡+薯條+可樂)，請列出各獨立食物。
+   - 陣列內每個物件需包含: name (名稱), weight_g (該項目預估重量), calories_kcal (該項目預估總熱量)。其加總應大致符合總重量與總熱量。
+4. 必須包含 "evaluation" 物件，為此份食物進行評分(score: A/B/C/D)與說明(reason)：
+   - fitness: 適合健身者嗎？為什麼？
+   - weight_loss: 適合瘦身者嗎？為什麼？
+   - diversity: 食材多樣性與均衡度如何？
+   - overall: 給這份餐點的綜合總結。
 
 JSON 結構範例：
 {
   "food_name": "估計的食物名稱",
-  "total_weight_g": 200,
+  "total_weight_g": 350,
   "nutrients_per_100g": {
-    "calories_kcal": 150,
+    "calories_kcal": 250,
     "protein_g": 10.0,
-    "fat_g": 5.0,
-    "carbs_g": 15.0,
-    "dietary_fiber_g": null
+    "fat_g": 12.0,
+    "carbs_g": 25.0
+  },
+  "breakdown": [
+    {"name": "漢堡肉", "weight_g": 100, "calories_kcal": 250},
+    {"name": "麵包", "weight_g": 80, "calories_kcal": 220}
+  ],
+  "evaluation": {
+    "fitness": {"score": "B", "reason": "蛋白質豐富，但脂肪略高..."},
+    "weight_loss": {"score": "C", "reason": "熱量偏高，建議搭配無糖飲料..."},
+    "diversity": {"score": "A", "reason": "包含澱粉、蛋白質與蔬菜..."},
+    "overall": {"score": "B", "reason": "整體來說是個不錯的放縱餐..."}
   }
 }
 ''';
@@ -171,9 +226,7 @@ JSON 結構範例：
       final String protocol = 'https://';
       final String host = 'generativelanguage.googleapis.com';
       final String path = '/v1beta/models/$modelName:generateContent?key=$apiKey';
-      final String cleanUrl = protocol + host + path;
-      
-      final url = Uri.parse(cleanUrl);
+      final url = Uri.parse(protocol + host + path);
 
       final response = await http.post(
         url,
@@ -252,8 +305,16 @@ JSON 結構範例：
 
   void _showResultAndSaveDialog(Map<String, dynamic> data) {
     final nameCtrl = TextEditingController(text: data['food_name'] ?? '未命名食物');
-    final totalWeight = data['total_weight_g'] ?? 0;
+    
+    final num totalWeight = data['total_weight_g'] ?? 0;
     final Map<String, dynamic> nutrients = data['nutrients_per_100g'] ?? {};
+    final num caloriesPer100g = nutrients['calories_kcal'] ?? 0;
+    
+    // 計算總熱量 (100g熱量 / 100 * 預估重量)
+    final num totalCalories = (caloriesPer100g / 100) * totalWeight;
+
+    final List<dynamic>? breakdown = data['breakdown'];
+    final Map<String, dynamic>? evaluation = data['evaluation'];
 
     showDialog(
       context: context,
@@ -274,9 +335,57 @@ JSON 結構範例：
                   ),
                 ),
                 const SizedBox(height: 12),
-                Text('預估總重量: $totalWeight 公克', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                const Divider(height: 20),
-                const Text('每 100g 營養含量：', style: TextStyle(fontWeight: FontWeight.bold)),
+                
+                // 顯示總重與總熱量
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8)
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      Column(
+                        children: [
+                          const Text('預估總重量', style: TextStyle(color: Colors.green)),
+                          Text('$totalWeight g', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                        ],
+                      ),
+                      Column(
+                        children: [
+                          const Text('預估總熱量', style: TextStyle(color: Colors.green)),
+                          Text('${totalCalories.toStringAsFixed(1)} kcal', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 24),
+                
+                // 顯示食物組成拆解
+                if (breakdown != null && breakdown.isNotEmpty) ...[
+                  const Text('🍔 食物組成拆解：', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  const SizedBox(height: 6),
+                  ...breakdown.map((item) => Padding(
+                    padding: const EdgeInsets.only(bottom: 4.0),
+                    child: Text('• ${item['name']} (${item['weight_g']}g, ${item['calories_kcal']}大卡)'),
+                  )),
+                  const Divider(height: 24),
+                ],
+
+                // 顯示 AI 評價
+                if (evaluation != null) ...[
+                  const Text('🤖 AI 專業評價：', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  _buildEvalRow('健身', evaluation['fitness']),
+                  _buildEvalRow('瘦身', evaluation['weight_loss']),
+                  _buildEvalRow('多樣性', evaluation['diversity']),
+                  _buildEvalRow('綜合', evaluation['overall']),
+                  const Divider(height: 24),
+                ],
+
+                // 每 100g 營養含量
+                const Text('📊 每 100g 營養素含量：', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 const SizedBox(height: 6),
                 ...nutrients.entries.where((e) => e.value != null).map((e) {
                   final label = nutrientDisplayNames[e.key] ?? e.key;
@@ -305,6 +414,7 @@ JSON 結構範例：
             onPressed: () async {
               data['food_name'] = nameCtrl.text.trim();
               data['record_date'] = DateTime.now().toString().substring(0, 16);
+              data['calculated_total_calories'] = totalCalories; // 存入算好的總熱量
 
               final prefs = await SharedPreferences.getInstance();
               final raw = prefs.getString('food_records') ?? '[]';
@@ -490,6 +600,14 @@ class _RecordsPageState extends State<RecordsPage> {
   void _showDetail(Map<String, dynamic> item, int index) {
     final Map<String, dynamic> nutrients = item['nutrients_per_100g'] ?? {};
     final editCtrl = TextEditingController(text: item['food_name']);
+    final List<dynamic>? breakdown = item['breakdown'];
+    final Map<String, dynamic>? evaluation = item['evaluation'];
+    
+    // 如果舊資料沒有存到 calculated_total_calories，就在這裡補算
+    num totalCalories = item['calculated_total_calories'] ?? 0;
+    if (totalCalories == 0) {
+       totalCalories = ((nutrients['calories_kcal'] ?? 0) / 100) * (item['total_weight_g'] ?? 0);
+    }
 
     showDialog(
       context: context,
@@ -532,9 +650,36 @@ class _RecordsPageState extends State<RecordsPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('紀錄時間: ${item['record_date'] ?? '無'}'),
-                Text('預估總重: ${item['total_weight_g'] ?? 0} 公克', style: const TextStyle(fontWeight: FontWeight.bold)),
-                const Divider(),
-                const Text('每 100g 數值：', style: TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: Colors.green.withOpacity(0.1), borderRadius: BorderRadius.circular(4)),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      Text('總重: ${item['total_weight_g'] ?? 0}g', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      Text('總熱量: ${totalCalories.toStringAsFixed(1)} kcal', style: const TextStyle(fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+                const Divider(height: 20),
+                
+                if (breakdown != null && breakdown.isNotEmpty) ...[
+                  const Text('🍔 拆解：', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  ...breakdown.map((b) => Text('• ${b['name']} (${b['weight_g']}g, ${b['calories_kcal']}大卡)')),
+                  const Divider(height: 20),
+                ],
+
+                if (evaluation != null) ...[
+                  const Text('🤖 評價：', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  _buildEvalRow('健身', evaluation['fitness']),
+                  _buildEvalRow('瘦身', evaluation['weight_loss']),
+                  _buildEvalRow('多樣性', evaluation['diversity']),
+                  _buildEvalRow('綜合', evaluation['overall']),
+                  const Divider(height: 20),
+                ],
+
+                const Text('📊 每 100g 數值：', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
                 const SizedBox(height: 6),
                 ...nutrients.entries.where((e) => e.value != null).map((e) {
                   final label = nutrientDisplayNames[e.key] ?? e.key;
@@ -601,13 +746,22 @@ class _RecordsPageState extends State<RecordsPage> {
                   itemCount: _records.length,
                   itemBuilder: (ctx, i) {
                     final item = _records[i];
+                    
+                    // 列表上顯示總熱量
+                    num totalCalories = item['calculated_total_calories'] ?? 0;
+                    if (totalCalories == 0) {
+                      final nutrients = item['nutrients_per_100g'] ?? {};
+                      totalCalories = ((nutrients['calories_kcal'] ?? 0) / 100) * (item['total_weight_g'] ?? 0);
+                    }
+
                     return ListTile(
                       leading: const CircleAvatar(
                         backgroundColor: Colors.green,
                         child: Icon(Icons.restaurant, color: Colors.white),
                       ),
                       title: Text(item['food_name'] ?? '未命名食物', style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text('${item['record_date'] ?? ''} · 約 ${item['total_weight_g'] ?? 0}g'),
+                      subtitle: Text('${item['record_date'] ?? ''}\n${item['total_weight_g'] ?? 0}g · ${totalCalories.toStringAsFixed(0)} kcal'),
+                      isThreeLine: true,
                       trailing: const Icon(Icons.arrow_forward_ios, size: 16),
                       onTap: () => _showDetail(item, i),
                     );
@@ -631,7 +785,6 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   final _apiKeyController = TextEditingController();
-  // 將初始預設值改為最新的 3.8 Flash
   String _selectedModel = 'gemini-3.8-flash';
 
   @override
@@ -683,7 +836,6 @@ class _SettingsPageState extends State<SettingsPage> {
           DropdownButtonFormField<String>(
             value: _selectedModel,
             decoration: const InputDecoration(border: OutlineInputBorder()),
-            // 替換回最新的 2026 模型清單
             items: const [
               DropdownMenuItem(value: 'gemini-3.8-flash', child: Text('Gemini 3.8 Flash (最新推薦)')),
               DropdownMenuItem(value: 'gemini-3.7-flash', child: Text('Gemini 3.7 Flash')),
