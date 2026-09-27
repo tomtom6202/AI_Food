@@ -541,7 +541,7 @@ class _CalculatorPageState extends State<CalculatorPage> {
                                   if (base64Img != null && base64Img.isNotEmpty)
                                     ClipRRect(borderRadius: BorderRadius.circular(4), child: Image.memory(base64Decode(base64Img), height: 50, width: 50, fit: BoxFit.cover))
                                   else
-                                    const Container(width: 50, height: 50, color: Colors.green, child: Icon(Icons.restaurant, color: Colors.white)),
+                                    Container(width: 50, height: 50, color: Colors.green, child: const Icon(Icons.restaurant, color: Colors.white)),
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Column(
