@@ -20,7 +20,7 @@ dependencies:
   path_provider: ^2.1.3
   share_plus: ^9.0.0
   flutter_launcher_icons: ^0.13.1
-  file_picker: ^8.0.0+1 # 新增這個套件
+  file_picker: ^6.1.1 # 新增這個套件
 # ... (後略)
 
 dev_dependencies:
