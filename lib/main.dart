@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -6,6 +7,8 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 void main() {
   runApp(const MyApp());
@@ -207,7 +210,7 @@ class _HomePageState extends State<HomePage> {
 （若有微量元素可自行加在 nutrients_per_100g 中，無則省略，數值請務必只填寫數字）
 ''';
 
-      // 使用 Uri.https 安全構造網址，避免複製貼上帶來的隱藏符號錯誤
+      // 使用 Uri.https 安全構造網址
       final url = Uri.https(
         'generativelanguage.googleapis.com',
         '/v1beta/models/$modelName:generateContent',
@@ -351,7 +354,7 @@ class _HomePageState extends State<HomePage> {
 }
 
 // ==========================================
-// 2. 紀錄頁面
+// 2. 紀錄頁面 (升級分享檔案匯出功能)
 // ==========================================
 class RecordsPage extends StatefulWidget {
   const RecordsPage({super.key});
@@ -380,31 +383,34 @@ class _RecordsPageState extends State<RecordsPage> {
     await prefs.setString('food_records', jsonEncode(_records));
   }
 
-  void _exportJsonFile() {
-    final jsonStr = jsonEncode(_records);
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('備份匯出 (純文字)'),
-        content: SizedBox(width: double.maxFinite, child: SingleChildScrollView(child: SelectableText(jsonStr, style: const TextStyle(fontSize: 10, color: Colors.grey)))),
-        actions: [
-          TextButton(
-            onPressed: () { Clipboard.setData(ClipboardData(text: jsonStr)); Navigator.pop(ctx); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已複製全部紀錄到剪貼簿！'))); },
-            child: const Text('複製全部資料', style: TextStyle(fontWeight: FontWeight.bold)),
-          ),
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('關閉')),
-        ],
-      ),
-    );
+  // 匯出功能：改為寫入暫存檔並呼叫系統分享
+  Future<void> _exportAndShareFile() async {
+    try {
+      final jsonStr = jsonEncode(_records);
+      // 取得手機的暫存資料夾
+      final directory = await getTemporaryDirectory();
+      // 在暫存資料夾建立檔案
+      final file = File('${directory.path}/food_backup.json');
+      await file.writeAsString(jsonStr);
+
+      // 使用 share_plus 分享這個檔案
+      final xFile = XFile(file.path);
+      await Share.shareXFiles([xFile], text: '這是我的 AI 食物分析備份檔！');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('分享失敗: $e')));
+      }
+    }
   }
 
+  // 匯入功能保持剪貼簿輸入，較為穩定
   void _importJsonFile() {
     final inputCtrl = TextEditingController();
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('備份匯入 (純文字)'),
-        content: TextField(controller: inputCtrl, maxLines: 8, decoration: const InputDecoration(hintText: '請貼上您之前複製的整段 JSON 資料...', border: OutlineInputBorder())),
+        title: const Text('貼上備份內容'),
+        content: TextField(controller: inputCtrl, maxLines: 8, decoration: const InputDecoration(hintText: '請開啟您備份的 .json 檔案，全選並複製裡面的文字，然後貼在這裡...', border: OutlineInputBorder())),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
           ElevatedButton(
@@ -502,7 +508,11 @@ class _RecordsPageState extends State<RecordsPage> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              OutlinedButton.icon(onPressed: _exportJsonFile, icon: const Icon(Icons.copy), label: const Text('匯出資料')),
+              OutlinedButton.icon(
+                onPressed: _exportAndShareFile, 
+                icon: const Icon(Icons.share), 
+                label: const Text('分享備份檔')
+              ),
               OutlinedButton.icon(onPressed: _importJsonFile, icon: const Icon(Icons.paste), label: const Text('貼上匯入')),
             ],
           ),
