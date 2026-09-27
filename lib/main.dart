@@ -9,6 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:file_picker/file_picker.dart'; // 💡 新增的套件
 
 void main() {
   runApp(const MyApp());
@@ -79,7 +80,7 @@ final Map<String, String> nutrientDisplayNames = {
   'vitamin_B6_mg': '維生素B6 (mg)', 'vitamin_B12_ug': '維生素B12 (ug)', 'vitamin_C_mg': '維生素C (mg)',
   'vitamin_D_ug': '維生素D (ug)', 'vitamin_E_mg': '維生素E (mg)', 'niacin_mg': '煙酸 (mg)',
   'phosphorus_mg': '磷 (mg)', 'potassium_mg': '鉀 (mg)', 'sodium_mg': '鈉 (mg)', 'magnesium_mg': '鎂 (mg)',
-  'iron_mg': '鐵 (mg)', 'zinc_mg': '鋅 (mg)', 'trans_fat_g': '反式脂肪 (g)', 'saturated_fat_g': '飽坐在肪 (g)',
+  'iron_mg': '鐵 (mg)', 'zinc_mg': '鋅 (mg)', 'trans_fat_g': '反式脂肪 (g)', 'saturated_fat_g': '飽和脂肪 (g)',
   'sugar_g': '糖 (g)', 'selenium_ug': '硒 (ug)', 'copper_ug': '銅 (ug)', 'manganese_mg': '錳 (mg)',
 };
 
@@ -170,7 +171,6 @@ class _HomePageState extends State<HomePage> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final apiKey = (prefs.getString('gemini_api_key') ?? '').trim();
-      // 正確回復為 3.8-flash 為預設值
       final modelName = prefs.getString('gemini_model') ?? 'gemini-3.8-flash';
 
       if (apiKey.isEmpty) {
@@ -332,7 +332,7 @@ class _HomePageState extends State<HomePage> {
 }
 
 // ==========================================
-// 2. 紀錄頁面 (加入實體 JSON 檔案匯出)
+// 2. 紀錄頁面 (加入實體檔案選取匯入)
 // ==========================================
 class RecordsPage extends StatefulWidget {
   const RecordsPage({super.key});
@@ -360,7 +360,7 @@ class _RecordsPageState extends State<RecordsPage> {
     await prefs.setString('food_records', jsonEncode(_records));
   }
 
-  // 實體檔案匯出功能
+  // 匯出功能 (維持檔案匯出分享)
   Future<void> _exportJsonFile() async {
     try {
       if (_records.isEmpty) {
@@ -378,30 +378,37 @@ class _RecordsPageState extends State<RecordsPage> {
     }
   }
 
-  void _importJsonFile() {
-    final inputCtrl = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('備份匯入 (純文字)'),
-        content: TextField(controller: inputCtrl, maxLines: 8, decoration: const InputDecoration(hintText: '請貼上您之前備份的 JSON 資料內容...', border: OutlineInputBorder())),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
-          ElevatedButton(
-            onPressed: () async {
-              try {
-                final List parsed = jsonDecode(inputCtrl.text.trim());
-                setState(() { _records = parsed.map((e) => Map<String, dynamic>.from(e)).toList(); });
-                await _saveRecords();
-                if (!mounted) return;
-                Navigator.pop(ctx); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('資料匯入成功！')));
-              } catch (_) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('匯入失敗，格式錯誤'))); }
-            },
-            child: const Text('確定匯入'),
-          ),
-        ],
-      ),
-    );
+  // 💡 實體檔案選取匯入功能
+  Future<void> _importJsonFile() async {
+    try {
+      // 開啟系統檔案選擇器
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['json'], // 限制只能選取 json 檔案
+      );
+
+      if (result != null && result.files.single.path != null) {
+        // 讀取檔案內容
+        File file = File(result.files.single.path!);
+        String fileContent = await file.readAsString();
+
+        // 解析 JSON
+        final List parsed = jsonDecode(fileContent.trim());
+        
+        setState(() {
+          _records = parsed.map((e) => Map<String, dynamic>.from(e)).toList();
+        });
+        await _saveRecords();
+        
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('檔案資料匯入成功！')));
+      } else {
+        // 使用者取消選取
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('匯入失敗，請確認檔案格式是否正確。錯誤: $e')));
+    }
   }
 
   void _showDetail(Map<String, dynamic> item, int index) {
@@ -476,7 +483,8 @@ class _RecordsPageState extends State<RecordsPage> {
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               OutlinedButton.icon(onPressed: _exportJsonFile, icon: const Icon(Icons.download), label: const Text('匯出為檔案')),
-              OutlinedButton.icon(onPressed: _importJsonFile, icon: const Icon(Icons.paste), label: const Text('貼上匯入')),
+              // 💡 匯入按鈕改為呼叫檔案選擇器
+              OutlinedButton.icon(onPressed: _importJsonFile, icon: const Icon(Icons.upload_file), label: const Text('選擇檔案匯入')),
             ],
           ),
         ),
@@ -634,7 +642,6 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   final _apiKeyController = TextEditingController();
   final _targetCaloriesController = TextEditingController(); 
-  // 正確回復為最新的 3.x 系列
   String _selectedModel = 'gemini-3.8-flash';
   bool _uploadOriginal = false;
 
