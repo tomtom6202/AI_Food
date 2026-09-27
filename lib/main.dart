@@ -67,7 +67,7 @@ class _MainScreenState extends State<MainScreen> {
 }
 
 // ==========================================
-// 全域共用工具與常數
+// 全域共用工具與常數 (終極防呆機制)
 // ==========================================
 final Map<String, String> nutrientDisplayNames = {
   'calories_kcal': '熱量 (kcal)', 'protein_g': '蛋白質 (g)', 'fat_g': '脂肪 (g)', 'carbs_g': '碳水化合物 (g)',
@@ -171,7 +171,6 @@ class _HomePageState extends State<HomePage> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final apiKey = (prefs.getString('gemini_api_key') ?? '').trim();
-      // 預設使用最新的 3.8-flash 模型
       final modelName = prefs.getString('gemini_model') ?? 'gemini-3.8-flash';
 
       if (apiKey.isEmpty) {
@@ -205,10 +204,16 @@ class _HomePageState extends State<HomePage> {
     "overall": {"score": "A", "reason": "說明..."}
   }
 }
-（若有微量元素可自行加在 nutrients_per_100g 中，無則省略）
+（若有微量元素可自行加在 nutrients_per_100g 中，無則省略，數值請務必只填寫數字）
 ''';
 
-      final url = Uri.parse('[https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent?key=$apiKey](https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent?key=$apiKey)');
+      // 使用 Uri.https 安全構造網址，避免複製貼上帶來的隱藏符號錯誤
+      final url = Uri.https(
+        'generativelanguage.googleapis.com',
+        '/v1beta/models/$modelName:generateContent',
+        {'key': apiKey}
+      );
+
       final requestBody = jsonEncode({ "contents": [{"parts": [{"text": prompt}, {"inline_data": {"mime_type": "image/jpeg", "data": base64Image}}]}], "generationConfig": {"response_mime_type": "application/json"} });
 
       while (!isCancelled) {
@@ -245,7 +250,7 @@ class _HomePageState extends State<HomePage> {
     } catch (e) {
       if (isRetrying && dialogContext != null && mounted) Navigator.pop(dialogContext!);
       if (!mounted) return;
-      showDialog(context: context, builder: (ctx) => AlertDialog(title: const Text('發生錯誤'), content: SingleChildScrollView(child: Text(e.toString())), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('確定'))]));
+      showDialog(context: context, builder: (ctx) => AlertDialog(title: const Text('發生錯誤'), content: SingleChildScrollView(child: Text('無法解析資料或連線異常。\n\n詳細錯誤：\n$e')), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('確定'))]));
     } finally {
       if (mounted) setState(() { _isLoading = false; });
     }
@@ -531,7 +536,7 @@ class _RecordsPageState extends State<RecordsPage> {
 }
 
 // ==========================================
-// 3. 熱量計算頁面
+// 3. 熱量計算頁面 (加入自動存檔功能)
 // ==========================================
 class CalculatorPage extends StatefulWidget {
   const CalculatorPage({super.key});
@@ -542,7 +547,7 @@ class CalculatorPage extends StatefulWidget {
 
 class _CalculatorPageState extends State<CalculatorPage> {
   List<Map<String, dynamic>> _records = [];
-  final List<Map<String, dynamic>> _selectedItems = [];
+  List<Map<String, dynamic>> _selectedItems = [];
   int _targetCalories = 2000;
 
   @override
@@ -553,15 +558,32 @@ class _CalculatorPageState extends State<CalculatorPage> {
 
   Future<void> _loadData() async {
     final prefs = await SharedPreferences.getInstance();
-    final List decoded = jsonDecode(prefs.getString('food_records') ?? '[]');
+    final List decodedRecords = jsonDecode(prefs.getString('food_records') ?? '[]');
+    // 讀取上次存檔的計算機清單
+    final List decodedCalc = jsonDecode(prefs.getString('calculator_items') ?? '[]'); 
+    
     setState(() {
-      _records = decoded.map((e) => Map<String, dynamic>.from(e)).toList();
+      _records = decodedRecords.map((e) => Map<String, dynamic>.from(e)).toList();
       _targetCalories = prefs.getInt('target_calories') ?? 2000;
+      
+      // 解析計算機資料，確保倍數 (multiplier) 轉換為 double 格式避免報錯
+      _selectedItems = decodedCalc.map((e) {
+        final map = Map<String, dynamic>.from(e);
+        map['multiplier'] = (map['multiplier'] as num).toDouble();
+        return map;
+      }).toList();
     });
+  }
+
+  // 儲存計算機狀態到手機本地端
+  Future<void> _saveCalculatorData() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('calculator_items', jsonEncode(_selectedItems));
   }
 
   void _addToCalculator(Map<String, dynamic> record) {
     setState(() { _selectedItems.add({'record': record, 'multiplier': 1.0}); });
+    _saveCalculatorData(); // 新增時存檔
   }
 
   void _updateMultiplier(int index, double delta) {
@@ -571,6 +593,7 @@ class _CalculatorPageState extends State<CalculatorPage> {
       if (current <= 0) _selectedItems.removeAt(index);
       else _selectedItems[index]['multiplier'] = current;
     });
+    _saveCalculatorData(); // 修改份數或刪除時存檔
   }
 
   @override
@@ -596,6 +619,7 @@ class _CalculatorPageState extends State<CalculatorPage> {
         Expanded(
           child: Row(
             children: [
+              // 左側：歷史紀錄清單
               Expanded(
                 flex: 1,
                 child: Container(
@@ -629,6 +653,7 @@ class _CalculatorPageState extends State<CalculatorPage> {
                 ),
               ),
               const VerticalDivider(width: 1, thickness: 1),
+              // 右側：已選取計算清單
               Expanded(
                 flex: 2,
                 child: _selectedItems.isEmpty
@@ -686,6 +711,7 @@ class _CalculatorPageState extends State<CalculatorPage> {
             ],
           ),
         ),
+        // 底部：總計區塊
         Container(
           padding: const EdgeInsets.all(16.0),
           decoration: const BoxDecoration(color: Colors.white, boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, -2))]),
@@ -704,7 +730,10 @@ class _CalculatorPageState extends State<CalculatorPage> {
                   ),
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                    onPressed: () => setState(() => _selectedItems.clear()),
+                    onPressed: () {
+                      setState(() => _selectedItems.clear());
+                      _saveCalculatorData(); // 清空時存檔
+                    },
                     icon: const Icon(Icons.delete_sweep, color: Colors.white),
                     label: const Text('清空', style: TextStyle(color: Colors.white)),
                   )
@@ -761,6 +790,12 @@ class _SettingsPageState extends State<SettingsPage> {
   String _selectedModel = 'gemini-3.8-flash';
   bool _uploadOriginal = false;
 
+  final Map<String, String> _modelDescriptions = {
+    'gemini-3.1-pro-preview': '【優點】最強大的模型，精準度極高，適合複雜食物與詳細微量元素分析。\n【缺點】處理速度較慢，免費 API 額度限制較嚴。',
+    'gemini-3.8-flash': '【優點】最新推薦模型，聰明且速度快，適合日常快速分析。\n【缺點】無明顯缺點，強烈建議設為首選。',
+    'gemini-3.5-flash-lite': '【優點】輕量極速版，回覆速度最快，幾乎不卡頓。\n【缺點】只適合簡單清晰的食物圖片，複雜的組合餐點容易誤判。',
+  };
+
   @override
   void initState() {
     super.initState();
@@ -794,31 +829,61 @@ class _SettingsPageState extends State<SettingsPage> {
         children: [
           const Text('每日目標熱量 (kcal)', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
-          TextField(controller: _targetCaloriesController, keyboardType: TextInputType.number, onChanged: (val) => _autoSaveSettings(), decoration: const InputDecoration(border: OutlineInputBorder(), prefixIcon: Icon(Icons.local_fire_department))), 
+          TextField(
+            controller: _targetCaloriesController,
+            keyboardType: TextInputType.number,
+            onChanged: (val) => _autoSaveSettings(),
+            decoration: const InputDecoration(hintText: '預設 2000', border: OutlineInputBorder(), prefixIcon: Icon(Icons.local_fire_department, color: Colors.orange)), 
+          ),
           const SizedBox(height: 16),
+          
           const Text('Gemini API 金鑰', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
-          TextField(controller: _apiKeyController, onChanged: (val) => _autoSaveSettings(), decoration: const InputDecoration(border: OutlineInputBorder(), prefixIcon: Icon(Icons.vpn_key)), obscureText: true),
-          Align(alignment: Alignment.centerRight, child: TextButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ApiKeyHelpPage())), child: const Text('如何免費申請 API Key？', style: TextStyle(decoration: TextDecoration.underline, color: Colors.blue)))),
+          TextField(
+            controller: _apiKeyController,
+            onChanged: (val) => _autoSaveSettings(), 
+            decoration: const InputDecoration(hintText: '請輸入你的 API Key', border: OutlineInputBorder(), prefixIcon: Icon(Icons.vpn_key)), 
+            obscureText: true
+          ),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(onPressed: () {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const ApiKeyHelpPage()));
+            }, child: const Text('如何免費申請 API Key？', style: TextStyle(decoration: TextDecoration.underline, fontSize: 13, color: Colors.blue))),
+          ),
           const SizedBox(height: 12),
+          
           const Text('選擇 AI 分析模型', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           DropdownButtonFormField<String>(
             value: _selectedModel,
             decoration: const InputDecoration(border: OutlineInputBorder()),
             items: const [
-              DropdownMenuItem(value: 'gemini-3.8-flash', child: Text('Gemini 3.8 Flash (最新主力)')),
-              DropdownMenuItem(value: 'gemini-3.5-flash-lite', child: Text('Gemini 3.5 Flash-Lite (高性價比)')),
-              DropdownMenuItem(value: 'gemini-3.1-pro', child: Text('Gemini 3.1 Pro (高推理能力)')),
+              DropdownMenuItem(value: 'gemini-3.1-pro-preview', child: Text('Gemini 3.1 Pro (最強)')),
+              DropdownMenuItem(value: 'gemini-3.8-flash', child: Text('Gemini 3.8 Flash (推薦)')),
+              DropdownMenuItem(value: 'gemini-3.5-flash-lite', child: Text('Gemini 3.5 Flash-Lite (極速)')),
             ],
             onChanged: (val) { if (val != null) { setState(() => _selectedModel = val); _autoSaveSettings(); } },
           ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: Colors.blue.withOpacity(0.05), borderRadius: BorderRadius.circular(8)),
+            child: Text(_modelDescriptions[_selectedModel] ?? '', style: const TextStyle(color: Colors.black87, height: 1.4)),
+          ),
           const SizedBox(height: 24),
+
           const Text('進階設定', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           Container(
             decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(8)),
-            child: SwitchListTile(title: const Text('上傳原圖給 AI 分析'), subtitle: const Text('開啟辨識更準但耗網路，關閉則自動壓縮。'), value: _uploadOriginal, activeColor: Colors.green, onChanged: (val) { setState(() => _uploadOriginal = val); _autoSaveSettings(); }),
+            child: SwitchListTile(
+              title: const Text('上傳原圖給 AI 分析', style: TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: const Text('【開啟】AI 辨識更精準，但消耗網路流量。\n【關閉】上傳前自動壓縮圖片，省流量速度快。', style: TextStyle(fontSize: 12, height: 1.3)),
+              value: _uploadOriginal,
+              activeColor: Colors.green,
+              onChanged: (val) { setState(() => _uploadOriginal = val); _autoSaveSettings(); },
+            ),
           ),
         ],
       ),
