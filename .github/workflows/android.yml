@@ -17,20 +17,30 @@ jobs:
         with:
           channel: 'stable'
           
+      # 1. 建立 Android 專案資料夾
       - run: flutter create . --platforms android
       
-      # [重點1]：強制替換 Android 顯示名稱，你可以把 "AI 營養顧問" 換成你想要的 App 名稱
+      # 2. [保留你的設定] 替換 App 顯示名稱與加入網路權限
       - run: sed -i 's/android:label="[^"]*"/android:label="AI 營養顧問"/g' android/app/src/main/AndroidManifest.xml
-      
       - run: sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET"/>' android/app/src/main/AndroidManifest.xml
       
+      # 3. [本次新增] 修正 Android 版本號以支援 share_plus 套件
+      - name: Fix Android SDK Versions
+        run: |
+          sed -i "s/flutter.minSdkVersion/21/g" android/app/build.gradle
+          sed -i "s/flutter.compileSdkVersion/34/g" android/app/build.gradle
+          sed -i "s/flutter.targetSdkVersion/34/g" android/app/build.gradle
+      
+      # 4. 下載套件
       - run: flutter pub get
       
-      # [重點2]：呼叫我們剛剛加入的套件，根據 icon.png 自動幫你裁切各種尺寸的 App 圖示
+      # 5. [保留你的設定] 產生 App 圖示
       - run: flutter pub run flutter_launcher_icons
       
+      # 6. 開始打包 APK
       - run: flutter build apk --release
       
+      # 7. 輸出檔案供下載
       - uses: actions/upload-artifact@v4
         with:
           name: app-release-apk
