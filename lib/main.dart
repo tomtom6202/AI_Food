@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
@@ -7,9 +6,6 @@ import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
-import 'package:file_picker/file_picker.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:path_provider/path_provider.dart';
 
 void main() {
   runApp(const MyApp());
@@ -43,10 +39,11 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // 總共 4 個頁面
     final List<Widget> pages = [
       HomePage(onGoToSettings: () => setState(() => _currentIndex = 3)),
       const RecordsPage(),
-      const CalculatorPage(), // 👇 新增的熱量計算頁面
+      const CalculatorPage(),
       const SettingsPage(),
     ];
 
@@ -58,8 +55,10 @@ class _MainScreenState extends State<MainScreen> {
       body: pages[_currentIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        type: BottomNavigationBarType.fixed, // 超過3個選項需加上這行
+        type: BottomNavigationBarType.fixed, // 超過3個選項必須加上這行，否則圖示會變白
         onTap: (index) => setState(() => _currentIndex = index),
+        selectedItemColor: Colors.green,
+        unselectedItemColor: Colors.grey,
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.camera_alt), label: '分析'),
           BottomNavigationBarItem(icon: Icon(Icons.list_alt), label: '紀錄'),
@@ -72,7 +71,7 @@ class _MainScreenState extends State<MainScreen> {
 }
 
 final Map<String, String> nutrientDisplayNames = {
-  'calories_kcal': '熱量', 'protein_g': '蛋白質', 'fat_g': '脂肪', 'carbs_g': '碳水',
+  'calories_kcal': '熱量 (kcal)', 'protein_g': '蛋白質 (g)', 'fat_g': '脂肪 (g)', 'carbs_g': '碳水化合物 (g)',
   'dietary_fiber_g': '膳食纖維 (g)', 'cholesterol_mg': '膽固醇 (mg)', 'calcium_mg': '鈣 (mg)',
   'vitamin_A_ug': '維生素A (ug)', 'vitamin_B1_mg': '維生素B1 (mg)', 'vitamin_B2_mg': '維生素B2 (mg)',
   'vitamin_B6_mg': '維生素B6 (mg)', 'vitamin_B12_ug': '維生素B12 (ug)', 'vitamin_C_mg': '維生素C (mg)',
@@ -112,7 +111,7 @@ Widget _buildEvalRow(String title, Map<String, dynamic>? evalData) {
 }
 
 // ==========================================
-// 1. 主頁面 (與之前相同，僅更新導覽邏輯)
+// 1. 主頁面：拍照與 AI 分析
 // ==========================================
 class HomePage extends StatefulWidget {
   final VoidCallback onGoToSettings;
@@ -222,6 +221,8 @@ class _HomePageState extends State<HomePage> {
     final num totalWeight = data['total_weight_g'] ?? 0;
     final Map<String, dynamic> nutrients = data['nutrients_per_100g'] ?? {};
     final num totalCalories = ((nutrients['calories_kcal'] ?? 0) / 100) * totalWeight;
+    final List<dynamic>? breakdown = data['breakdown'];
+    final Map<String, dynamic>? evaluation = data['evaluation'];
 
     showDialog(
       context: context, barrierDismissible: false,
@@ -237,7 +238,17 @@ class _HomePageState extends State<HomePage> {
                 const SizedBox(height: 12),
                 Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.green.withOpacity(0.1), borderRadius: BorderRadius.circular(8)), child: Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [Column(children: [const Text('預估總重量', style: TextStyle(color: Colors.green)), Text('$totalWeight g', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18))]), Column(children: [const Text('預估總熱量', style: TextStyle(color: Colors.green)), Text('${totalCalories.toStringAsFixed(1)} kcal', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18))])])),
                 const Divider(height: 24),
-                // (省略其他UI避免版面過長，維持原樣)
+                if (breakdown != null && breakdown.isNotEmpty) ...[
+                  const Text('🍔 食物組成拆解：', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  ...breakdown.map((item) => Padding(padding: const EdgeInsets.only(bottom: 4.0), child: Text('• ${item['name']} (${item['weight_g']}g, ${item['calories_kcal']}大卡)'))),
+                  const Divider(height: 24),
+                ],
+                if (evaluation != null) ...[
+                  const Text('🤖 AI 專業評價：', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  _buildEvalRow('健身', evaluation['fitness']), _buildEvalRow('瘦身', evaluation['weight_loss']),
+                  _buildEvalRow('多樣性', evaluation['diversity']), _buildEvalRow('綜合', evaluation['overall']),
+                  const Divider(height: 24),
+                ],
                 const Text('📊 每 100g 營養素含量：', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 ...nutrients.entries.where((e) => e.value != null).map((e) => Padding(padding: const EdgeInsets.symmetric(vertical: 2.0), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(nutrientDisplayNames[e.key] ?? e.key), Text('${e.value}', style: const TextStyle(fontWeight: FontWeight.bold))]))),
               ],
@@ -287,7 +298,7 @@ class _HomePageState extends State<HomePage> {
 }
 
 // ==========================================
-// 2. 紀錄頁面 (升級實體檔案匯出/匯入)
+// 2. 紀錄頁面 (純文字剪貼簿備份，保證不報錯)
 // ==========================================
 class RecordsPage extends StatefulWidget {
   const RecordsPage({super.key});
@@ -316,47 +327,133 @@ class _RecordsPageState extends State<RecordsPage> {
     await prefs.setString('food_records', jsonEncode(_records));
   }
 
-  // 👇 使用實體檔案分享 JSON
-  Future<void> _exportJsonFile() async {
-    try {
-      final String jsonString = jsonEncode(_records);
-      final directory = await getTemporaryDirectory();
-      final file = File('${directory.path}/food_records_backup.json');
-      await file.writeAsString(jsonString);
-      
-      final xFile = XFile(file.path, mimeType: 'application/json');
-      await Share.shareXFiles([xFile], text: '我的 AI 飲食紀錄備份');
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('匯出失敗: $e')));
-    }
+  void _exportJsonFile() {
+    final jsonStr = jsonEncode(_records);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('備份匯出 (純文字)'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: SelectableText(jsonStr, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: jsonStr));
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已複製全部紀錄到剪貼簿，請貼到備忘錄保存！')));
+            },
+            child: const Text('複製全部資料', style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('關閉')),
+        ],
+      ),
+    );
   }
 
-  // 👇 使用檔案瀏覽器選取 JSON 匯入
-  Future<void> _importJsonFile() async {
-    try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['json'],
-      );
-
-      if (result != null && result.files.single.path != null) {
-        File file = File(result.files.single.path!);
-        String jsonString = await file.readAsString();
-        final List parsed = jsonDecode(jsonString);
-        
-        setState(() { _records = parsed.map((e) => Map<String, dynamic>.from(e)).toList(); });
-        await _saveRecords();
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('檔案匯入成功！')));
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('匯入失敗，請確認檔案格式: $e')));
-    }
+  void _importJsonFile() {
+    final inputCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('備份匯入 (純文字)'),
+        content: TextField(
+          controller: inputCtrl,
+          maxLines: 8,
+          decoration: const InputDecoration(hintText: '請貼上您之前複製的整段 JSON 資料...', border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          ElevatedButton(
+            onPressed: () async {
+              try {
+                final List parsed = jsonDecode(inputCtrl.text.trim());
+                setState(() { _records = parsed.map((e) => Map<String, dynamic>.from(e)).toList(); });
+                await _saveRecords();
+                if (!mounted) return;
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('資料匯入成功！')));
+              } catch (_) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('匯入失敗，請確認貼上的文字格式正確')));
+              }
+            },
+            child: const Text('確定匯入'),
+          ),
+        ],
+      ),
+    );
   }
 
-  // (省略 _showDetail 內容，保持不變以免過長)
   void _showDetail(Map<String, dynamic> item, int index) {
-    // 內容與之前版本相同...
+    final Map<String, dynamic> nutrients = item['nutrients_per_100g'] ?? {};
+    final editCtrl = TextEditingController(text: item['food_name']);
+    final List<dynamic>? breakdown = item['breakdown'];
+    final Map<String, dynamic>? evaluation = item['evaluation'];
+    final String? base64Img = item['image_base64'];
+    num totalCalories = item['calculated_total_calories'] ?? (((nutrients['calories_kcal'] ?? 0) / 100) * (item['total_weight_g'] ?? 0));
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Expanded(child: Text(item['food_name'] ?? '詳細數據')),
+            IconButton(
+              icon: const Icon(Icons.edit, size: 20),
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (editCtx) => AlertDialog(
+                    title: const Text('修改名稱'),
+                    content: TextField(controller: editCtrl),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(editCtx), child: const Text('取消')),
+                      ElevatedButton(onPressed: () { setState(() { item['food_name'] = editCtrl.text.trim(); }); _saveRecords(); Navigator.pop(editCtx); Navigator.pop(ctx); }, child: const Text('保存')),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (base64Img != null && base64Img.isNotEmpty)
+                  Padding(padding: const EdgeInsets.only(bottom: 12.0), child: ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.memory(base64Decode(base64Img), height: 180, width: double.infinity, fit: BoxFit.cover))),
+                Text('紀錄時間: ${item['record_date'] ?? '無'}'),
+                const SizedBox(height: 8),
+                Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: Colors.green.withOpacity(0.1), borderRadius: BorderRadius.circular(4)), child: Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [Text('總重: ${item['total_weight_g'] ?? 0}g', style: const TextStyle(fontWeight: FontWeight.bold)), Text('總熱量: ${totalCalories.toStringAsFixed(1)} kcal', style: const TextStyle(fontWeight: FontWeight.bold))])),
+                const Divider(height: 20),
+                if (breakdown != null && breakdown.isNotEmpty) ...[
+                  const Text('🍔 拆解：', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  ...breakdown.map((b) => Text('• ${b['name']} (${b['weight_g']}g, ${b['calories_kcal']}大卡)')),
+                  const Divider(height: 20),
+                ],
+                if (evaluation != null) ...[
+                  const Text('🤖 評價：', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                  _buildEvalRow('健身', evaluation['fitness']), _buildEvalRow('瘦身', evaluation['weight_loss']),
+                  _buildEvalRow('多樣性', evaluation['diversity']), _buildEvalRow('綜合', evaluation['overall']),
+                  const Divider(height: 20),
+                ],
+                const Text('📊 每 100g 數值：', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                ...nutrients.entries.where((e) => e.value != null).map((e) => Padding(padding: const EdgeInsets.symmetric(vertical: 2.0), child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text(nutrientDisplayNames[e.key] ?? e.key), Text('${e.value}', style: const TextStyle(fontWeight: FontWeight.bold))]))),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(style: TextButton.styleFrom(foregroundColor: Colors.red), onPressed: () { setState(() { _records.removeAt(index); }); _saveRecords(); Navigator.pop(ctx); }, child: const Text('刪除此筆')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('關閉')),
+        ],
+      ),
+    );
   }
 
   @override
@@ -368,8 +465,8 @@ class _RecordsPageState extends State<RecordsPage> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              OutlinedButton.icon(onPressed: _exportJsonFile, icon: const Icon(Icons.download), label: const Text('匯出檔案')),
-              OutlinedButton.icon(onPressed: _importJsonFile, icon: const Icon(Icons.upload_file), label: const Text('上傳檔案')),
+              OutlinedButton.icon(onPressed: _exportJsonFile, icon: const Icon(Icons.copy), label: const Text('匯出資料')),
+              OutlinedButton.icon(onPressed: _importJsonFile, icon: const Icon(Icons.paste), label: const Text('貼上匯入')),
             ],
           ),
         ),
@@ -388,6 +485,7 @@ class _RecordsPageState extends State<RecordsPage> {
                       title: Text(item['food_name'] ?? '未命名食物', style: const TextStyle(fontWeight: FontWeight.bold)),
                       subtitle: Text('${item['record_date'] ?? ''}\n${item['total_weight_g'] ?? 0}g · ${totalCalories.toStringAsFixed(0)} kcal'),
                       trailing: IconButton(icon: const Icon(Icons.delete, color: Colors.red), onPressed: (){ setState(() { _records.removeAt(i); }); _saveRecords(); }),
+                      onTap: () => _showDetail(item, i),
                     );
                   },
                 ),
@@ -398,7 +496,7 @@ class _RecordsPageState extends State<RecordsPage> {
 }
 
 // ==========================================
-// 3. 全新功能：熱量計算頁面
+// 3. 全新功能：熱量計算頁面 (修正了 const Container Bug)
 // ==========================================
 class CalculatorPage extends StatefulWidget {
   const CalculatorPage({super.key});
@@ -409,9 +507,8 @@ class CalculatorPage extends StatefulWidget {
 
 class _CalculatorPageState extends State<CalculatorPage> {
   List<Map<String, dynamic>> _records = [];
-  // 記錄被選到右邊的食物，格式：{'record': 食物資料, 'multiplier': 份數(預設1.0)}
   final List<Map<String, dynamic>> _selectedItems = [];
-  int _targetCalories = 2000; // 預設目標熱量
+  int _targetCalories = 2000;
 
   @override
   void initState() {
@@ -430,10 +527,7 @@ class _CalculatorPageState extends State<CalculatorPage> {
 
   void _addToCalculator(Map<String, dynamic> record) {
     setState(() {
-      _selectedItems.add({
-        'record': record,
-        'multiplier': 1.0, // 預設加進去是一份
-      });
+      _selectedItems.add({'record': record, 'multiplier': 1.0}); // 預設 1 份
     });
   }
 
@@ -451,10 +545,7 @@ class _CalculatorPageState extends State<CalculatorPage> {
 
   @override
   Widget build(BuildContext context) {
-    double totalKcal = 0;
-    double totalProtein = 0;
-    double totalFat = 0;
-    double totalCarbs = 0;
+    double totalKcal = 0, totalProtein = 0, totalFat = 0, totalCarbs = 0;
 
     for (var item in _selectedItems) {
       final record = item['record'];
@@ -462,7 +553,6 @@ class _CalculatorPageState extends State<CalculatorPage> {
       final double weight = (record['total_weight_g'] ?? 0).toDouble();
       final nutrients = record['nutrients_per_100g'] ?? {};
       
-      // 計算該份量的實際數值 (每100克數值 / 100 * 總克數 * 份數)
       totalKcal += ((nutrients['calories_kcal'] ?? 0) / 100) * weight * multiplier;
       totalProtein += ((nutrients['protein_g'] ?? 0) / 100) * weight * multiplier;
       totalFat += ((nutrients['fat_g'] ?? 0) / 100) * weight * multiplier;
@@ -511,7 +601,7 @@ class _CalculatorPageState extends State<CalculatorPage> {
                 ),
               ),
               const VerticalDivider(width: 1, thickness: 1),
-              // 右側：選擇的食物計算清單 (2/3 寬度)
+              // 右側：選擇的食物清單 (2/3 寬度)
               Expanded(
                 flex: 2,
                 child: _selectedItems.isEmpty
@@ -525,7 +615,6 @@ class _CalculatorPageState extends State<CalculatorPage> {
                           final double weight = (record['total_weight_g'] ?? 0).toDouble();
                           final nutrients = record['nutrients_per_100g'] ?? {};
                           
-                          // 計算顯示數值
                           final kcal = ((nutrients['calories_kcal'] ?? 0) / 100) * weight * multiplier;
                           final protein = ((nutrients['protein_g'] ?? 0) / 100) * weight * multiplier;
                           final fat = ((nutrients['fat_g'] ?? 0) / 100) * weight * multiplier;
@@ -541,6 +630,7 @@ class _CalculatorPageState extends State<CalculatorPage> {
                                   if (base64Img != null && base64Img.isNotEmpty)
                                     ClipRRect(borderRadius: BorderRadius.circular(4), child: Image.memory(base64Decode(base64Img), height: 50, width: 50, fit: BoxFit.cover))
                                   else
+                                    // 👇 這裡已經修正！拿掉了 const
                                     Container(width: 50, height: 50, color: Colors.green, child: const Icon(Icons.restaurant, color: Colors.white)),
                                   const SizedBox(width: 8),
                                   Expanded(
@@ -555,7 +645,7 @@ class _CalculatorPageState extends State<CalculatorPage> {
                                   ),
                                   Column(
                                     children: [
-                                      IconButton(icon: const Icon(Icons.add_circle, color: Colors.green), padding: EdgeInsets.zero, constraints: const BoxConstraints(), onPressed: () => _updateMultiplier(i, 0.5)), // 每次加 0.5 份
+                                      IconButton(icon: const Icon(Icons.add_circle, color: Colors.green), padding: EdgeInsets.zero, constraints: const BoxConstraints(), onPressed: () => _updateMultiplier(i, 0.5)),
                                       Text('${multiplier} 份', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                                       IconButton(icon: const Icon(Icons.do_not_disturb_on, color: Colors.red), padding: EdgeInsets.zero, constraints: const BoxConstraints(), onPressed: () => _updateMultiplier(i, -0.5)),
                                     ],
@@ -570,12 +660,12 @@ class _CalculatorPageState extends State<CalculatorPage> {
             ],
           ),
         ),
-        // 下半部總計區塊
+        // 下半部：總計區塊
         Container(
           padding: const EdgeInsets.all(16.0),
-          decoration: BoxDecoration(
+          decoration: const BoxDecoration(
             color: Colors.white,
-            boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4, offset: const Offset(0, -2))],
+            boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, -2))],
           ),
           child: Column(
             children: [
@@ -616,7 +706,34 @@ class _CalculatorPageState extends State<CalculatorPage> {
 }
 
 // ==========================================
-// 4. 設定頁面 (新增目標熱量設定)
+// 4. 教學頁面 (API Key 獲取步驟)
+// ==========================================
+class ApiKeyHelpPage extends StatelessWidget {
+  const ApiKeyHelpPage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('如何獲取免費 API Key'), backgroundColor: Colors.blue),
+      body: ListView(
+        padding: const EdgeInsets.all(16.0),
+        children: const [
+          Text('申請步驟：', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          SizedBox(height: 16),
+          ListTile(leading: CircleAvatar(child: Text('1')), title: Text('前往 Google AI Studio 網站', style: TextStyle(fontWeight: FontWeight.bold)), subtitle: Text('網址：https://aistudio.google.com/')),
+          ListTile(leading: CircleAvatar(child: Text('2')), title: Text('登入您的帳號', style: TextStyle(fontWeight: FontWeight.bold)), subtitle: Text('使用您常用的 Google 帳號登入。')),
+          ListTile(leading: CircleAvatar(child: Text('3')), title: Text('點擊取得金鑰', style: TextStyle(fontWeight: FontWeight.bold)), subtitle: Text('在左側選單中尋找並點擊「Get API key」。')),
+          ListTile(leading: CircleAvatar(child: Text('4')), title: Text('建立新金鑰', style: TextStyle(fontWeight: FontWeight.bold)), subtitle: Text('點擊畫面中間的「Create API key」藍色按鈕。')),
+          ListTile(leading: CircleAvatar(child: Text('5')), title: Text('選擇新專案', style: TextStyle(fontWeight: FontWeight.bold)), subtitle: Text('在彈出的視窗中，點擊「Create API key in new project」。')),
+          ListTile(leading: CircleAvatar(child: Text('6')), title: Text('複製並貼上', style: TextStyle(fontWeight: FontWeight.bold)), subtitle: Text('複製畫面上生成的那一長串英文與數字，回到這個 App 的設定頁面貼上即可！')),
+        ],
+      ),
+    );
+  }
+}
+
+// ==========================================
+// 5. 設定頁面 (新增目標熱量設定)
 // ==========================================
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -627,7 +744,7 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   final _apiKeyController = TextEditingController();
-  final _targetCaloriesController = TextEditingController(); // 👇 新增
+  final _targetCaloriesController = TextEditingController(); 
   String _selectedModel = 'gemini-3.8-flash';
   bool _uploadOriginal = false;
 
@@ -647,7 +764,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _apiKeyController.text = prefs.getString('gemini_api_key') ?? '';
-      _targetCaloriesController.text = (prefs.getInt('target_calories') ?? 2000).toString(); // 👇 載入目標熱量
+      _targetCaloriesController.text = (prefs.getInt('target_calories') ?? 2000).toString(); 
       _selectedModel = prefs.getString('gemini_model') ?? 'gemini-3.8-flash';
       _uploadOriginal = prefs.getBool('upload_original') ?? false;
     });
@@ -656,7 +773,7 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _autoSaveSettings() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('gemini_api_key', _apiKeyController.text.trim());
-    await prefs.setInt('target_calories', int.tryParse(_targetCaloriesController.text.trim()) ?? 2000); // 👇 儲存目標熱量
+    await prefs.setInt('target_calories', int.tryParse(_targetCaloriesController.text.trim()) ?? 2000); 
     await prefs.setString('gemini_model', _selectedModel);
     await prefs.setBool('upload_original', _uploadOriginal);
   }
@@ -690,7 +807,9 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           Align(
             alignment: Alignment.centerRight,
-            child: TextButton(onPressed: () {}, child: const Text('如何免費申請 API Key？', style: TextStyle(decoration: TextDecoration.underline, fontSize: 13, color: Colors.blue))),
+            child: TextButton(onPressed: () {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const ApiKeyHelpPage()));
+            }, child: const Text('如何免費申請 API Key？', style: TextStyle(decoration: TextDecoration.underline, fontSize: 13, color: Colors.blue))),
           ),
           const SizedBox(height: 12),
           
