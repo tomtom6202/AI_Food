@@ -22,15 +22,15 @@ jobs:
       - run: sed -i 's/android:label="[^"]*"/android:label="AI 營養顧問"/g' android/app/src/main/AndroidManifest.xml
       - run: sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET"/>' android/app/src/main/AndroidManifest.xml
       
-      - name: Set SDK versions safely
+      # 這次我們直接暴力修改 build.gradle 裡面的設定值，強制鎖定為 36
+      - name: Force Update SDK Version
         run: |
-          echo "flutter.compileSdkVersion=36" >> android/local.properties
-          echo "flutter.targetSdkVersion=36" >> android/local.properties
-          echo "flutter.minSdkVersion=21" >> android/local.properties
+          sed -i 's/flutter.compileSdkVersion/36/g' android/app/build.gradle
+          sed -i 's/flutter.targetSdkVersion/36/g' android/app/build.gradle
+          sed -i 's/flutter.minSdkVersion/21/g' android/app/build.gradle
       
       - run: flutter pub get
       
-      # 新增這行：自動生成並替換 App Icon
       - run: flutter pub run flutter_launcher_icons
       
       - run: flutter build apk --release
