@@ -20,21 +20,26 @@ jobs:
       # 1. 建立 Android 專案資料夾
       - run: flutter create . --platforms android
       
-      # 2. [保留你的設定] 替換 App 顯示名稱與加入網路權限
+      # 2. 替換 App 顯示名稱與加入網路權限
       - run: sed -i 's/android:label="[^"]*"/android:label="AI 營養顧問"/g' android/app/src/main/AndroidManifest.xml
       - run: sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET"/>' android/app/src/main/AndroidManifest.xml
       
-      # 3. [本次修正] 檔名後方加上萬用字元 *，完美對應新版 Flutter 的 .kts 檔案
-      - name: Fix Android SDK Versions
+      # 3. 終極魔法：自動升級 Kotlin 語言版本與 Android SDK
+      - name: Ultimate Fix for Android & Kotlin Versions
         run: |
-          sed -i "s/flutter.minSdkVersion/21/g" android/app/build.gradle*
-          sed -i "s/flutter.compileSdkVersion/34/g" android/app/build.gradle*
-          sed -i "s/flutter.targetSdkVersion/34/g" android/app/build.gradle*
+          # 升級 Kotlin 版本 (解決 3 分鐘後編譯失敗的核心原因)
+          find android -type f -name "settings.gradle" -exec sed -i -E 's/id "org.jetbrains.kotlin.android" version "[0-9\.]+"/id "org.jetbrains.kotlin.android" version "1.9.24"/g' {} +
+          find android -type f -name "build.gradle" -exec sed -i -E "s/ext.kotlin_version = .*/ext.kotlin_version = '1.9.24'/g" {} +
+          
+          # 升級 Android SDK 版本 (相容最新套件)
+          find android/app -type f -name "build.gradle*" -exec sed -i 's/flutter.minSdkVersion/21/g' {} +
+          find android/app -type f -name "build.gradle*" -exec sed -i 's/flutter.compileSdkVersion/34/g' {} +
+          find android/app -type f -name "build.gradle*" -exec sed -i 's/flutter.targetSdkVersion/34/g' {} +
       
       # 4. 下載套件
       - run: flutter pub get
       
-      # 5. [保留你的設定] 產生 App 圖示
+      # 5. 產生 App 圖示
       - run: flutter pub run flutter_launcher_icons
       
       # 6. 開始打包 APK
