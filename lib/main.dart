@@ -94,9 +94,6 @@ final Map<String, String> nutrientDisplayNames = {
   'manganese_mg': '錳 (mg)',
 };
 
-// ==========================================
-// 共用元件：用來顯示 AI 評價區塊
-// ==========================================
 Widget _buildEvalRow(String title, Map<String, dynamic>? evalData) {
   if (evalData == null) return const SizedBox.shrink();
   final score = evalData['score'] ?? '?';
@@ -136,7 +133,7 @@ Widget _buildEvalRow(String title, Map<String, dynamic>? evalData) {
 }
 
 // ==========================================
-// 1. 主頁面 (拍照、備註與 AI 分析)
+// 1. 主頁面
 // ==========================================
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -152,7 +149,13 @@ class _HomePageState extends State<HomePage> {
 
   Future<void> _pickImage(ImageSource source) async {
     final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: source, maxWidth: 800);
+    // 【修改點】在此進行強力壓縮：限制寬高 500px，畫質 60，避免 JSON 檔案過大
+    final pickedFile = await picker.pickImage(
+      source: source, 
+      maxWidth: 500, 
+      maxHeight: 500, 
+      imageQuality: 60
+    );
     if (pickedFile != null) {
       final bytes = await pickedFile.readAsBytes();
       setState(() {
@@ -183,7 +186,6 @@ class _HomePageState extends State<HomePage> {
 
       final base64Image = base64Encode(_imageBytes!);
 
-      // 進階版 Prompt：加入了拆解(breakdown)與評價(evaluation)的規則
       final prompt = '''
 你是一位專業的 AI 營養顧問。請分析照片中的食物，並參考備註：「${_noteController.text.trim()}」。
 
@@ -211,14 +213,13 @@ JSON 結構範例：
     "carbs_g": 25.0
   },
   "breakdown": [
-    {"name": "漢堡肉", "weight_g": 100, "calories_kcal": 250},
-    {"name": "麵包", "weight_g": 80, "calories_kcal": 220}
+    {"name": "漢堡肉", "weight_g": 100, "calories_kcal": 250}
   ],
   "evaluation": {
-    "fitness": {"score": "B", "reason": "蛋白質豐富，但脂肪略高..."},
-    "weight_loss": {"score": "C", "reason": "熱量偏高，建議搭配無糖飲料..."},
-    "diversity": {"score": "A", "reason": "包含澱粉、蛋白質與蔬菜..."},
-    "overall": {"score": "B", "reason": "整體來說是個不錯的放縱餐..."}
+    "fitness": {"score": "B", "reason": "蛋白質豐富..."},
+    "weight_loss": {"score": "C", "reason": "熱量偏高..."},
+    "diversity": {"score": "A", "reason": "包含澱粉..."},
+    "overall": {"score": "B", "reason": "整體來說..."}
   }
 }
 ''';
@@ -264,7 +265,8 @@ JSON 結構範例：
         final Map<String, dynamic> resultJson = jsonDecode(rawText);
 
         if (!mounted) return;
-        _showResultAndSaveDialog(resultJson);
+        // 【修改點】把剛剛壓好的圖片 Base64 字串一起傳給儲存視窗
+        _showResultAndSaveDialog(resultJson, base64Image);
       } else {
         String msg = '未知錯誤';
         try {
@@ -303,14 +305,12 @@ JSON 結構範例：
     }
   }
 
-  void _showResultAndSaveDialog(Map<String, dynamic> data) {
+  void _showResultAndSaveDialog(Map<String, dynamic> data, String base64Img) {
     final nameCtrl = TextEditingController(text: data['food_name'] ?? '未命名食物');
     
     final num totalWeight = data['total_weight_g'] ?? 0;
     final Map<String, dynamic> nutrients = data['nutrients_per_100g'] ?? {};
     final num caloriesPer100g = nutrients['calories_kcal'] ?? 0;
-    
-    // 計算總熱量 (100g熱量 / 100 * 預估重量)
     final num totalCalories = (caloriesPer100g / 100) * totalWeight;
 
     final List<dynamic>? breakdown = data['breakdown'];
@@ -336,7 +336,6 @@ JSON 結構範例：
                 ),
                 const SizedBox(height: 12),
                 
-                // 顯示總重與總熱量
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
@@ -363,7 +362,6 @@ JSON 結構範例：
                 ),
                 const Divider(height: 24),
                 
-                // 顯示食物組成拆解
                 if (breakdown != null && breakdown.isNotEmpty) ...[
                   const Text('🍔 食物組成拆解：', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                   const SizedBox(height: 6),
@@ -374,7 +372,6 @@ JSON 結構範例：
                   const Divider(height: 24),
                 ],
 
-                // 顯示 AI 評價
                 if (evaluation != null) ...[
                   const Text('🤖 AI 專業評價：', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                   _buildEvalRow('健身', evaluation['fitness']),
@@ -384,7 +381,6 @@ JSON 結構範例：
                   const Divider(height: 24),
                 ],
 
-                // 每 100g 營養含量
                 const Text('📊 每 100g 營養素含量：', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 const SizedBox(height: 6),
                 ...nutrients.entries.where((e) => e.value != null).map((e) {
@@ -414,7 +410,9 @@ JSON 結構範例：
             onPressed: () async {
               data['food_name'] = nameCtrl.text.trim();
               data['record_date'] = DateTime.now().toString().substring(0, 16);
-              data['calculated_total_calories'] = totalCalories; // 存入算好的總熱量
+              data['calculated_total_calories'] = totalCalories;
+              // 【修改點】將壓縮過的圖片 Base64 文字存入紀錄中
+              data['image_base64'] = base64Img;
 
               final prefs = await SharedPreferences.getInstance();
               final raw = prefs.getString('food_records') ?? '[]';
@@ -500,7 +498,7 @@ JSON 結構範例：
 }
 
 // ==========================================
-// 2. 紀錄頁面 (檢視、編輯名稱、匯出/上傳 JSON)
+// 2. 紀錄頁面
 // ==========================================
 class RecordsPage extends StatefulWidget {
   const RecordsPage({super.key});
@@ -533,11 +531,11 @@ class _RecordsPageState extends State<RecordsPage> {
   }
 
   void _exportJson() {
-    final jsonStr = const JsonEncoder.withIndent('  ').convert(_records);
+    final jsonStr = jsonEncode(_records); // 匯出時不排版，以節省空間
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('匯出紀錄 (JSON)'),
+        title: const Text('匯出紀錄 (包含圖片資料)'),
         content: SizedBox(
           width: double.maxFinite,
           child: SingleChildScrollView(
@@ -549,7 +547,7 @@ class _RecordsPageState extends State<RecordsPage> {
             onPressed: () {
               Clipboard.setData(ClipboardData(text: jsonStr));
               Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已複製 JSON 至剪貼簿！')));
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('已複製完整紀錄至剪貼簿！')));
             },
             child: const Text('複製全部'),
           ),
@@ -603,7 +601,9 @@ class _RecordsPageState extends State<RecordsPage> {
     final List<dynamic>? breakdown = item['breakdown'];
     final Map<String, dynamic>? evaluation = item['evaluation'];
     
-    // 如果舊資料沒有存到 calculated_total_calories，就在這裡補算
+    // 取得圖片資料
+    final String? base64Img = item['image_base64'];
+
     num totalCalories = item['calculated_total_calories'] ?? 0;
     if (totalCalories == 0) {
        totalCalories = ((nutrients['calories_kcal'] ?? 0) / 100) * (item['total_weight_g'] ?? 0);
@@ -649,6 +649,21 @@ class _RecordsPageState extends State<RecordsPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // 【修改點】如果有照片，在這裡顯示出來
+                if (base64Img != null && base64Img.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12.0),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.memory(
+                        base64Decode(base64Img), 
+                        height: 180, 
+                        width: double.infinity, 
+                        fit: BoxFit.cover
+                      ),
+                    ),
+                  ),
+
                 Text('紀錄時間: ${item['record_date'] ?? '無'}'),
                 const SizedBox(height: 8),
                 Container(
@@ -746,8 +761,8 @@ class _RecordsPageState extends State<RecordsPage> {
                   itemCount: _records.length,
                   itemBuilder: (ctx, i) {
                     final item = _records[i];
+                    final String? base64Img = item['image_base64'];
                     
-                    // 列表上顯示總熱量
                     num totalCalories = item['calculated_total_calories'] ?? 0;
                     if (totalCalories == 0) {
                       final nutrients = item['nutrients_per_100g'] ?? {};
@@ -755,10 +770,16 @@ class _RecordsPageState extends State<RecordsPage> {
                     }
 
                     return ListTile(
-                      leading: const CircleAvatar(
-                        backgroundColor: Colors.green,
-                        child: Icon(Icons.restaurant, color: Colors.white),
-                      ),
+                      // 【修改點】列表前方如果有儲存照片，也會顯示小縮圖
+                      leading: base64Img != null && base64Img.isNotEmpty
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: Image.memory(base64Decode(base64Img), width: 50, height: 50, fit: BoxFit.cover),
+                            )
+                          : const CircleAvatar(
+                              backgroundColor: Colors.green,
+                              child: Icon(Icons.restaurant, color: Colors.white),
+                            ),
                       title: Text(item['food_name'] ?? '未命名食物', style: const TextStyle(fontWeight: FontWeight.bold)),
                       subtitle: Text('${item['record_date'] ?? ''}\n${item['total_weight_g'] ?? 0}g · ${totalCalories.toStringAsFixed(0)} kcal'),
                       isThreeLine: true,
@@ -774,7 +795,7 @@ class _RecordsPageState extends State<RecordsPage> {
 }
 
 // ==========================================
-// 3. 設定頁面 (儲存 API Key 與模型選擇)
+// 3. 設定頁面
 // ==========================================
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
