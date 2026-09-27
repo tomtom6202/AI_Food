@@ -172,7 +172,7 @@ class _HomePageState extends State<HomePage> {
     try {
       final prefs = await SharedPreferences.getInstance();
       final apiKey = (prefs.getString('gemini_api_key') ?? '').trim();
-      final modelName = prefs.getString('gemini_model') ?? 'gemini-1.5-flash';
+      final modelName = prefs.getString('gemini_model') ?? 'gemini-3.8-flash'; // 確保預設為最新版本
 
       if (apiKey.isEmpty) {
         if (!mounted) return;
@@ -664,13 +664,13 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   final _apiKeyController = TextEditingController();
-  String _selectedModel = 'gemini-1.5-flash';
+  String _selectedModel = 'gemini-3.8-flash';
   bool _uploadOriginal = false;
 
   final Map<String, String> _modelDescriptions = {
-    'gemini-1.5-pro': '【優點】最強大的模型，精準度極高，適合複雜食物與詳細微量元素分析。\n【缺點】處理速度較慢，且免費 API 額度限制較嚴格。',
-    'gemini-1.5-flash': '【優點】最新推薦模型，聰明且速度快，適合日常快速分析。\n【缺點】無明顯缺點，為首選方案。',
-    'gemini-1.5-flash-8b': '【優點】輕量極速版，回覆速度最快，幾乎不卡頓。\n【缺點】只適合簡單清晰的食物圖片，複雜的組合餐點容易誤判。',
+    'gemini-3.1-pro': '【優點】最強大的模型，精準度極高，適合複雜食物與詳細微量元素分析。\n【缺點】處理速度較慢，且免費 API 額度限制較嚴格。',
+    'gemini-3.8-flash': '【優點】最新推薦模型，聰明且速度快，適合日常快速分析。\n【缺點】無明顯缺點，為首選方案。',
+    'gemini-3.5-flash-lite': '【優點】輕量極速版，回覆速度最快，幾乎不卡頓。\n【缺點】只適合簡單清晰的食物圖片，複雜的組合餐點容易誤判。',
   };
 
   @override
@@ -683,7 +683,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final prefs = await SharedPreferences.getInstance();
     setState(() {
       _apiKeyController.text = prefs.getString('gemini_api_key') ?? '';
-      _selectedModel = prefs.getString('gemini_model') ?? 'gemini-1.5-flash';
+      _selectedModel = prefs.getString('gemini_model') ?? 'gemini-3.8-flash';
       _uploadOriginal = prefs.getBool('upload_original') ?? false;
     });
   }
@@ -734,9 +734,9 @@ class _SettingsPageState extends State<SettingsPage> {
             value: _selectedModel,
             decoration: const InputDecoration(border: OutlineInputBorder()),
             items: const [
-              DropdownMenuItem(value: 'gemini-1.5-pro', child: Text('Gemini 1.5 Pro (最強)')),
-              DropdownMenuItem(value: 'gemini-1.5-flash', child: Text('Gemini 1.5 Flash (推薦)')),
-              DropdownMenuItem(value: 'gemini-1.5-flash-8b', child: Text('Gemini 1.5 Flash-8B (極速)')),
+              DropdownMenuItem(value: 'gemini-3.1-pro', child: Text('Gemini 3.1 Pro (最強)')),
+              DropdownMenuItem(value: 'gemini-3.8-flash', child: Text('Gemini 3.8 Flash (推薦)')),
+              DropdownMenuItem(value: 'gemini-3.5-flash-lite', child: Text('Gemini 3.5 Flash-Lite (極速)')),
             ],
             onChanged: (val) { 
               if (val != null) {
