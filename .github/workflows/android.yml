@@ -17,19 +17,36 @@ jobs:
         with:
           channel: 'stable'
           
-      - run: flutter create . --platforms android
-      
-      - run: sed -i 's/android:label="[^"]*"/android:label="AI 營養顧問"/g' android/app/src/main/AndroidManifest.xml
-      - run: sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET"/>' android/app/src/main/AndroidManifest.xml
-      
-      # 終極破解法：同時處理新版 .kts 與舊版 .gradle，找不到檔案也不會報錯 (|| true)
-      - name: Force Update SDK Version
+      # 1. 刪除可能有問題的舊設定，讓 Flutter 重新產生乾淨的 Android 專案
+      - name: Recreate Android Project
         run: |
-          sed -i 's/flutter.compileSdkVersion/36/g' android/app/build.gradle.kts || true
-          sed -i 's/flutter.targetSdkVersion/36/g' android/app/build.gradle.kts || true
-          sed -i 's/flutter.compileSdkVersion/36/g' android/app/build.gradle || true
-          sed -i 's/flutter.targetSdkVersion/36/g' android/app/build.gradle || true
-      
+          rm -rf android
+          flutter create . --platforms android
+          
+      # 2. 設定 App 顯示名稱與網路權限
+      - name: Setup App Config
+        run: |
+          sed -i 's/android:label="[^"]*"/android:label="AI 營養顧問"/g' android/app/src/main/AndroidManifest.xml
+          sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET"/>' android/app/src/main/AndroidManifest.xml
+
+      # 3. 終極魔法：強制 App 與所有第三方套件 (包含 file_picker) 全部使用 SDK 36
+      - name: Force SDK 36 Globally
+        run: |
+          # 升級 App 自身的 SDK
+          sed -i 's/flutter.compileSdkVersion/36/g' android/app/build.gradle.kts
+          sed -i 's/flutter.targetSdkVersion/36/g' android/app/build.gradle.kts
+          
+          # 寫入全域設定，強迫所有套件覆寫為 SDK 36
+          echo '
+          subprojects {
+              afterEvaluate {
+                  val androidExt = extensions.findByName("android")
+                  if (androidExt != null) {
+                      (androidExt as com.android.build.gradle.BaseExtension).compileSdkVersion(36)
+                  }
+              }
+          }' >> android/build.gradle.kts
+
       - run: flutter pub get
       
       - run: flutter pub run flutter_launcher_icons
