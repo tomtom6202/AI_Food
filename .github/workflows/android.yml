@@ -24,17 +24,17 @@ jobs:
       - run: sed -i 's/android:label="[^"]*"/android:label="AI 營養顧問"/g' android/app/src/main/AndroidManifest.xml
       - run: sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET"/>' android/app/src/main/AndroidManifest.xml
       
-      # 3. 終極魔法：自動升級 Kotlin 語言版本與 Android SDK
+      # 3. 終極魔法：自動升級 Kotlin 語言版本與 Android SDK (配合最新要求升級至 36)
       - name: Ultimate Fix for Android & Kotlin Versions
         run: |
-          # 升級 Kotlin 版本 (解決 3 分鐘後編譯失敗的核心原因)
+          # 升級 Kotlin 版本
           find android -type f -name "settings.gradle" -exec sed -i -E 's/id "org.jetbrains.kotlin.android" version "[0-9\.]+"/id "org.jetbrains.kotlin.android" version "1.9.24"/g' {} +
           find android -type f -name "build.gradle" -exec sed -i -E "s/ext.kotlin_version = .*/ext.kotlin_version = '1.9.24'/g" {} +
           
-          # 升級 Android SDK 版本 (相容最新套件)
+          # 升級 Android SDK 版本 (將原本的 34 改為截圖中要求的 36)
           find android/app -type f -name "build.gradle*" -exec sed -i 's/flutter.minSdkVersion/21/g' {} +
-          find android/app -type f -name "build.gradle*" -exec sed -i 's/flutter.compileSdkVersion/34/g' {} +
-          find android/app -type f -name "build.gradle*" -exec sed -i 's/flutter.targetSdkVersion/34/g' {} +
+          find android/app -type f -name "build.gradle*" -exec sed -i 's/flutter.compileSdkVersion/36/g' {} +
+          find android/app -type f -name "build.gradle*" -exec sed -i 's/flutter.targetSdkVersion/36/g' {} +
       
       # 4. 下載套件
       - run: flutter pub get
