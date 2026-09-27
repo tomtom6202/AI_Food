@@ -24,31 +24,12 @@ jobs:
       - run: sed -i 's/android:label="[^"]*"/android:label="AI 營養顧問"/g' android/app/src/main/AndroidManifest.xml
       - run: sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET"/>' android/app/src/main/AndroidManifest.xml
       
-      # 3. 終極魔法：升級 Kotlin，並「強制所有套件」升級 Android SDK 36
-      - name: Ultimate Fix for Android & Kotlin Versions
+      # 3. [終極乾淨版] 使用官方推薦的 local.properties 來設定版本，絕不破壞原檔案！
+      - name: Set Android SDK Versions safely
         run: |
-          # 升級 Kotlin 版本
-          find android -type f -name "settings.gradle" -exec sed -i -E 's/id "org.jetbrains.kotlin.android" version "[0-9\.]+"/id "org.jetbrains.kotlin.android" version "1.9.24"/g' {} +
-          find android -type f -name "build.gradle" -exec sed -i -E "s/ext.kotlin_version = .*/ext.kotlin_version = '1.9.24'/g" {} +
-          
-          # 升級 Android SDK 版本 (App 主程式層級)
-          find android/app -type f -name "build.gradle*" -exec sed -i 's/flutter.minSdkVersion/21/g' {} +
-          find android/app -type f -name "build.gradle*" -exec sed -i 's/flutter.compileSdkVersion/36/g' {} +
-          find android/app -type f -name "build.gradle*" -exec sed -i 's/flutter.targetSdkVersion/36/g' {} +
-          
-          # 強制所有第三方套件 (如 share_plus) 一律使用 compileSdkVersion 36
-          cat <<EOF >> android/build.gradle
-          
-          subprojects {
-              afterEvaluate { project ->
-                  if (project.hasProperty('android')) {
-                      project.android {
-                          compileSdkVersion 36
-                      }
-                  }
-              }
-          }
-          EOF
+          echo "flutter.minSdkVersion=21" >> android/local.properties
+          echo "flutter.compileSdkVersion=36" >> android/local.properties
+          echo "flutter.targetSdkVersion=36" >> android/local.properties
       
       # 4. 下載套件
       - run: flutter pub get
