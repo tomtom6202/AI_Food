@@ -24,12 +24,12 @@ jobs:
       - run: sed -i 's/android:label="[^"]*"/android:label="AI 營養顧問"/g' android/app/src/main/AndroidManifest.xml
       - run: sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET"/>' android/app/src/main/AndroidManifest.xml
       
-      # 3. [本次新增] 修正 Android 版本號以支援 share_plus 套件
+      # 3. [本次修正] 檔名後方加上萬用字元 *，完美對應新版 Flutter 的 .kts 檔案
       - name: Fix Android SDK Versions
         run: |
-          sed -i "s/flutter.minSdkVersion/21/g" android/app/build.gradle
-          sed -i "s/flutter.compileSdkVersion/34/g" android/app/build.gradle
-          sed -i "s/flutter.targetSdkVersion/34/g" android/app/build.gradle
+          sed -i "s/flutter.minSdkVersion/21/g" android/app/build.gradle*
+          sed -i "s/flutter.compileSdkVersion/34/g" android/app/build.gradle*
+          sed -i "s/flutter.targetSdkVersion/34/g" android/app/build.gradle*
       
       # 4. 下載套件
       - run: flutter pub get
