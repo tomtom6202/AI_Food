@@ -207,7 +207,13 @@ class _HomePageState extends State<HomePage> {
 （若有微量元素可自行加在 nutrients_per_100g 中，無則省略，數值請務必只填寫數字）
 ''';
 
-      final url = Uri.parse('[https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent?key=$apiKey](https://generativelanguage.googleapis.com/v1beta/models/$modelName:generateContent?key=$apiKey)');
+      // 🛡️ 這裡改用安全的 Uri.https，徹底避免複製貼上帶來的隱藏符號與括號錯誤
+      final url = Uri.https(
+        'generativelanguage.googleapis.com',
+        '/v1beta/models/$modelName:generateContent',
+        {'key': apiKey}
+      );
+
       final requestBody = jsonEncode({ "contents": [{"parts": [{"text": prompt}, {"inline_data": {"mime_type": "image/jpeg", "data": base64Image}}]}], "generationConfig": {"response_mime_type": "application/json"} });
 
       while (!isCancelled) {
